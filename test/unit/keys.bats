@@ -37,6 +37,8 @@ teardown() { teardown_env; }
 }
 
 @test "files are concatenated in the order given" {
+  [ "$(key_hash_files 'zzz' f1 f3)" = "$(cat f1 f3 | sha256sum | cut -d' ' -f1)" ]
+  [ "$(key_hash_files 'zzz' f3 f1)" = "$(cat f3 f1 | sha256sum | cut -d' ' -f1)" ]
   [ "$(key_hash_files 'zzz' f1 f3)" != "$(key_hash_files 'zzz' f3 f1)" ]
 }
 
@@ -59,11 +61,26 @@ teardown() { teardown_env; }
   [ "$output" = "$(printf '' | sha256sum | cut -d' ' -f1)" ]
 }
 
+@test "an invalid ignore pattern fails instead of hashing empty input" {
+  run key_hash_files '(' f1
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"invalid ignore pattern"* ]]
+  [[ ! "$output" =~ [0-9a-f]{64} ]]
+}
+
+@test "an unreadable file fails instead of hashing partial input" {
+  [ "$(id -u)" -ne 0 ] || skip "running as root"
+  chmod 000 f3
+  run key_hash_files 'zzz' f1 f3
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"cannot read"* ]]
+}
+
 @test "falls back to shasum -a 256 when sha256sum is unavailable" {
   expected=$(cat f1 | grep -v -E 'zzz' | sha256sum | cut -d' ' -f1)
   # a PATH with the basic tools and a shasum that only accepts "-a 256", but no sha256sum
   mkdir "${TEST_TMP}/bin"
-  for t in cat grep cut tr sed awk; do ln -s "$(command -v "$t")" "${TEST_TMP}/bin/$t"; done
+  for t in cat grep cut tr sed awk mktemp rm; do ln -s "$(command -v "$t")" "${TEST_TMP}/bin/$t"; done
   printf '#!/bin/sh\n[ "$1 $2" = "-a 256" ] || exit 9\nshift 2\nexec %s "$@"\n' "$(command -v sha256sum)" >"${TEST_TMP}/bin/shasum"
   chmod +x "${TEST_TMP}/bin/shasum"
   saved_path="${PATH}"

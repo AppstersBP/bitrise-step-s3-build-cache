@@ -34,6 +34,28 @@ key_hash_files() {
     log_error "none of the key files exist"
     return 1
   fi
-  # grep exits 1 when it selects no line; that is not an error here.
-  { cat "${existing[@]}" | grep -v -E -- "${ignore}" || [ $? -eq 1 ]; } | _key_sha256
+  # Byte-exact pipeline (no command substitution on the data). grep exits 1 when
+  # it selects no line, which is fine; any other failure must not produce a key.
+  # The hash goes to a temporary file so that nothing is printed on failure.
+  local statuses out
+  out="$(mktemp)" || return 1
+  cat "${existing[@]}" | grep -v -E -- "${ignore}" | _key_sha256 >"${out}"
+  statuses=("${PIPESTATUS[@]}")
+  if [ "${statuses[0]}" -ne 0 ]; then
+    rm -f "${out}"
+    log_error "cannot read the key files"
+    return 1
+  fi
+  if [ "${statuses[1]}" -gt 1 ]; then
+    rm -f "${out}"
+    log_error "invalid ignore pattern: ${ignore}"
+    return 1
+  fi
+  if [ "${statuses[2]}" -ne 0 ]; then
+    rm -f "${out}"
+    log_error "cannot compute the SHA-256"
+    return 1
+  fi
+  cat "${out}"
+  rm -f "${out}"
 }
