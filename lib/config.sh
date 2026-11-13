@@ -70,6 +70,12 @@ cfg_validate() {
   case "${CFG_CONNECT_TIMEOUT}" in
     "" | *[!0-9]* | 0*) problems+=("connect_timeout: '${CFG_CONNECT_TIMEOUT}' is not a positive integer") ;;
   esac
+  for cache in ${CFG_CACHES[@]+"${CFG_CACHES[@]}"}; do
+    if [ "${cache}" = cocoapods ]; then
+      [ -n "${CFG_COCOAPODS_LOCKFILE}" ] || problems+=("cocoapods_lockfile (step input)")
+      [ -n "${CFG_COCOAPODS_DIR}" ] || problems+=("cocoapods_dir (step input)")
+    fi
+  done
   [ -n "${CFG_CCACHE_MAX_SIZE}" ] || problems+=("ccache_max_size: is empty (for example 5G)")
 
   if [ "${#problems[@]}" -gt 0 ]; then

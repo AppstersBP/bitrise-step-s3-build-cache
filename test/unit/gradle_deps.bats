@@ -85,7 +85,7 @@ teardown() { teardown_env; }
   [ "${S3_CACHE_RESULT_GRADLE_DEPS}" = none ]
   [ ! -e "${HOME}/.gradle/caches" ]
   grep -qi "damaged" "${TEST_TMP}/err"
-  [ -z "$(find "${TMPDIR:-/tmp}" -maxdepth 1 -name 's3-build-cache-gradle*' 2>/dev/null)" ]
+  [ -z "$(find "${TMPDIR:-/tmp}" -maxdepth 1 -name 's3-build-cache-fetch*' 2>/dev/null)" ]
 }
 
 @test "save after exact hit renews the date and does not upload" {

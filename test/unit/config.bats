@@ -109,3 +109,19 @@ teardown() { teardown_env; }
   cfg_init
   [ "${CFG_SOURCE_DIR}" = "${PWD}" ]
 }
+
+@test "empty cocoapods settings are errors when cocoapods is selected" {
+  export caches=cocoapods cocoapods_dir="" cocoapods_lockfile=""
+  cfg_init
+  run cfg_validate
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"cocoapods_lockfile (step input)"* ]]
+  [[ "$output" == *"cocoapods_dir (step input)"* ]]
+}
+
+@test "empty cocoapods settings are ignored when cocoapods is not selected" {
+  export caches=gradle-deps cocoapods_dir="" cocoapods_lockfile=""
+  cfg_init
+  run cfg_validate
+  [ "$status" -eq 0 ]
+}

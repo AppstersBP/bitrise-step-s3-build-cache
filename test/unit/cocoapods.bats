@@ -168,3 +168,64 @@ make_pods() {
   cache_cocoapods_restore 2>/dev/null
   [ -f "${BITRISE_SOURCE_DIR}/app/ios/Pods/p.h" ]
 }
+
+@test "an empty directory is skipped on restore and save" {
+  make_pods
+  export cocoapods_dir=""
+  cfg_init
+  export STUB_AWS_GET_FILE="${TEST_TMP}/served.tar.zst"
+  cache_cocoapods_restore 2>"${TEST_TMP}/err"
+  [ "${S3_CACHE_RESULT_COCOAPODS}" = skipped ]
+  grep -qi "empty" "${TEST_TMP}/err"
+  cache_cocoapods_save 2>/dev/null
+  [ "${S3_CACHE_SAVE_COCOAPODS}" = skipped ]
+  refute_called "aws"
+}
+
+@test "dot, the source directory itself and a trailing-slash source are skipped" {
+  make_pods
+  local d
+  for d in "." "./" "${BITRISE_SOURCE_DIR}" "${BITRISE_SOURCE_DIR}/" "ios/.." "/"; do
+    export cocoapods_dir="${d}"
+    cfg_init
+    : >"${STUB_LOG}"
+    cache_cocoapods_restore 2>/dev/null
+    [ "${S3_CACHE_RESULT_COCOAPODS}" = skipped ]
+    cache_cocoapods_save 2>/dev/null
+    [ "${S3_CACHE_SAVE_COCOAPODS}" = skipped ]
+    refute_called "aws"
+  done
+}
+
+@test "a relative directory escaping the source directory is skipped" {
+  mkdir -p "${TEST_TMP}/x/Pods"
+  export cocoapods_dir="../x/Pods"
+  cfg_init
+  export STUB_AWS_GET_FILE="${TEST_TMP}/served.tar.zst"
+  cache_cocoapods_restore 2>"${TEST_TMP}/err"
+  [ "${S3_CACHE_RESULT_COCOAPODS}" = skipped ]
+  cache_cocoapods_save 2>/dev/null
+  [ "${S3_CACHE_SAVE_COCOAPODS}" = skipped ]
+  refute_called "aws"
+}
+
+@test "a leading ./ is normalised to the plain layout" {
+  make_pods
+  export cocoapods_dir="./ios/Pods"
+  export cocoapods_lockfile="./ios/Podfile.lock"
+  cfg_init
+  storage_put() { cp "$1" "${TEST_TMP}/uploaded.tar.zst"; }
+  cache_cocoapods_save 2>/dev/null
+  [ "${S3_CACHE_SAVE_COCOAPODS}" = uploaded ]
+  tar --zstd -tf "${TEST_TMP}/uploaded.tar.zst" | grep -q "^ios/Pods/B/b.h"
+}
+
+@test "a source directory with a trailing slash still saves" {
+  make_pods
+  export BITRISE_SOURCE_DIR="${BITRISE_SOURCE_DIR}/"
+  cfg_init
+  storage_put() { cp "$1" "${TEST_TMP}/uploaded.tar.zst"; }
+  cache_cocoapods_save 2>/dev/null
+  [ "${S3_CACHE_SAVE_COCOAPODS}" = uploaded ]
+  tar --zstd -tf "${TEST_TMP}/uploaded.tar.zst" | grep -q "^ios/Pods/B/b.h"
+}

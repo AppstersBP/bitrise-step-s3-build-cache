@@ -76,6 +76,16 @@ stub_storage_get() {
   [ -z "$(ls -A "${TMPDIR}")" ]
 }
 
+@test "cache_fetch leaves nothing in TMPDIR after a damaged archive" {
+  export TMPDIR="${TEST_TMP}/tmp"
+  mkdir -p "${TMPDIR}"
+  echo "not an archive" >"${TEST_TMP}/bad"
+  export STUB_AWS_GET_FILE="${TEST_TMP}/bad"
+  run cache_fetch t cache/x/a.tar.zst "${DEST}"
+  [ "$status" -eq 1 ]
+  [ -z "$(ls -A "${TMPDIR}")" ]
+}
+
 @test "chain: current branch object gives exact" {
   stub_storage_get
   FETCH_OK="cache/x/p-feat_x.tar.zst"
@@ -125,10 +135,20 @@ stub_storage_get() {
 
 @test "chain: damaged current archive continues to the fallback branch" {
   stub_storage_get
-  FETCH_OK="cache/x/p-main.tar.zst"
-  archive_extract() { [ "$(grep -c . "${FETCHED}")" -gt 1 ]; }
+  FETCH_OK="cache/x/p-feat_x.tar.zst cache/x/p-main.tar.zst"
+  # The current branch archive downloads but is damaged; the fallback one is good.
+  storage_get() {
+    echo "$1" >>"${FETCHED}"
+    case "$1" in
+      cache/x/p-feat_x.tar.zst) echo "not an archive" >"$2" ;;
+      cache/x/p-main.tar.zst) cp "${TEST_TMP}/served.tar.zst" "$2" ;;
+      *) return 1 ;;
+    esac
+  }
   cache_restore_chain t p- "${DEST}" 2>"${TEST_TMP}/err"
   [ "${S3_CACHE_RESULT_T}" = fallback ]
+  grep -qi "damaged" "${TEST_TMP}/err"
+  [ -f "${DEST}/data/entry" ]
 }
 
 @test "chain: nothing stored gives none" {

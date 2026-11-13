@@ -9,8 +9,27 @@ COCOAPODS_ID="cocoapods"
 _cocoapods_abs() {
   case "$1" in
     /*) printf '%s' "$1" ;;
-    *) printf '%s/%s' "${CFG_SOURCE_DIR}" "$1" ;;
+    *) printf '%s/%s' "${CFG_SOURCE_DIR%/}" "$1" ;;
   esac
+}
+
+# _cocoapods_normalise ABSOLUTE_PATH: resolve ".", ".." and repeated slashes
+# lexically (no symbolic links). Prints "/" for the root.
+_cocoapods_normalise() {
+  local part out=() oldifs="${IFS}"
+  IFS=/
+  # shellcheck disable=SC2086 # split on "/" on purpose
+  set -f
+  for part in $1; do
+    case "${part}" in
+      "" | .) ;;
+      ..) [ "${#out[@]}" -gt 0 ] && unset 'out[${#out[@]}-1]' ;;
+      *) out+=("${part}") ;;
+    esac
+  done
+  set +f
+  printf '/%s' "${out[*]-}"
+  IFS="${oldifs}"
 }
 
 # _cocoapods_object: print the object key for the current lock file.
@@ -23,17 +42,38 @@ _cocoapods_object() {
 }
 
 # _cocoapods_paths: set _COCOAPODS_BASE (directory the archive is relative to)
-# and _COCOAPODS_PATH (the Pods directory relative to it).
+# and _COCOAPODS_PATH (the Pods directory relative to it). Returns 1 (with a
+# warning) for a directory that is empty, the source directory itself, "/" or a
+# relative path that leaves the source directory.
 _cocoapods_paths() {
-  local dir
-  dir="$(_cocoapods_abs "${CFG_COCOAPODS_DIR}")"
-  dir="${dir%/}"
+  local dir src
+  src="$(_cocoapods_normalise "${CFG_SOURCE_DIR}")"
+  if [ -z "${CFG_COCOAPODS_DIR}" ]; then
+    log_cache "${COCOAPODS_ID}" "warning: the CocoaPods directory is empty, skipped"
+    return 1
+  fi
+  dir="$(_cocoapods_normalise "$(_cocoapods_abs "${CFG_COCOAPODS_DIR}")")"
   case "${dir}" in
-    "${CFG_SOURCE_DIR%/}"/*)
-      _COCOAPODS_BASE="${CFG_SOURCE_DIR%/}"
-      _COCOAPODS_PATH="${dir#"${CFG_SOURCE_DIR%/}"/}"
+    "${src}")
+      log_cache "${COCOAPODS_ID}" "warning: the CocoaPods directory ${CFG_COCOAPODS_DIR} is the source directory, skipped"
+      return 1
+      ;;
+    "${src%/}"/*)
+      _COCOAPODS_BASE="${src%/}"
+      _COCOAPODS_PATH="${dir#"${src%/}"/}"
+      ;;
+    /)
+      log_cache "${COCOAPODS_ID}" "warning: the CocoaPods directory ${CFG_COCOAPODS_DIR} is the root directory, skipped"
+      return 1
       ;;
     *)
+      case "${CFG_COCOAPODS_DIR}" in
+        /*) ;;
+        *)
+          log_cache "${COCOAPODS_ID}" "warning: the CocoaPods directory ${CFG_COCOAPODS_DIR} leaves the source directory, skipped"
+          return 1
+          ;;
+      esac
       _COCOAPODS_BASE="$(dirname "${dir}")"
       _COCOAPODS_PATH="$(basename "${dir}")"
       ;;
@@ -47,7 +87,10 @@ cache_cocoapods_restore() {
     out_result "${COCOAPODS_ID}" skipped
     return 0
   fi
-  _cocoapods_paths
+  if ! _cocoapods_paths; then
+    out_result "${COCOAPODS_ID}" skipped
+    return 0
+  fi
 
   if cache_fetch "${COCOAPODS_ID}" "${object}" "${_COCOAPODS_BASE}"; then
     state_set COCOAPODS_EXACT_KEY "${object}"
@@ -66,7 +109,10 @@ cache_cocoapods_save() {
     out_save "${COCOAPODS_ID}" skipped
     return 0
   fi
-  _cocoapods_paths
+  if ! _cocoapods_paths; then
+    out_save "${COCOAPODS_ID}" skipped
+    return 0
+  fi
   if [ ! -e "${_COCOAPODS_BASE}/${_COCOAPODS_PATH}" ]; then
     log_cache "${COCOAPODS_ID}" "nothing to save: ${_COCOAPODS_BASE}/${_COCOAPODS_PATH} does not exist"
     out_save "${COCOAPODS_ID}" skipped

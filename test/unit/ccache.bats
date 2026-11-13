@@ -197,7 +197,7 @@ without_ccache() {
   [ "${S3_CACHE_RESULT_CCACHE}" = none ]
   [ ! -e "${HOME}/.ccache/entry" ]
   grep -qi "damaged" "${TEST_TMP}/err"
-  [ -z "$(find "${TMPDIR:-/tmp}" -maxdepth 1 -name 's3-build-cache-ccache*' 2>/dev/null)" ]
+  [ -z "$(find "${TMPDIR:-/tmp}" -maxdepth 1 -name 's3-build-cache-fetch*' 2>/dev/null)" ]
   assert_called "ccache --max-size=8G"
 }
 

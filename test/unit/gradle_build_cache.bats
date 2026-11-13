@@ -87,7 +87,7 @@ teardown() { teardown_env; }
   [ "${S3_CACHE_RESULT_GRADLE_BUILD_CACHE}" = none ]
   [ ! -e "${HOME}/.gradle/caches/build-cache-1" ]
   grep -qi "damaged" "${TEST_TMP}/err"
-  [ -z "$(find "${TMPDIR:-/tmp}" -maxdepth 1 -name 's3-build-cache-gradle-bc*' 2>/dev/null)" ]
+  [ -z "$(find "${TMPDIR:-/tmp}" -maxdepth 1 -name 's3-build-cache-fetch*' 2>/dev/null)" ]
 }
 
 @test "restore enables the build cache in gradle.properties exactly once" {
