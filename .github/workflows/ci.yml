@@ -25,8 +25,30 @@ jobs:
           chmod +x "$HOME/.local/bin/bitrise" "$HOME/.local/bin/stepman"
           echo "$HOME/.local/bin" >> "$GITHUB_PATH"
       - name: shellcheck
-        run: shellcheck step.sh lib/*.sh e2e/scripts/*.sh test/helpers/stubs/*
+        run: shellcheck step.sh lib/*.sh lib/caches/*.sh e2e/scripts/*.sh test/helpers/stubs/*
       - name: Audit the step
         run: bitrise run audit-this-step
+      - name: Unit tests
+        run: bats test/unit
+
+  integration:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install bats-core and zstd
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y bats zstd
+      - name: Check the AWS CLI
+        run: aws --version
+      - name: Integration tests (MinIO)
+        run: bats test/integration
+
+  unit-macos:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install bats-core and zstd
+        run: brew install bats-core zstd
       - name: Unit tests
         run: bats test/unit

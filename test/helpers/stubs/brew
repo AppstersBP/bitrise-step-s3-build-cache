@@ -5,6 +5,6 @@ echo "brew $*" >>"${STUB_LOG:-/dev/null}"
 rc="${STUB_BREW_EXIT:-0}"
 # Simulate a successful installation: place a ccache stub into $STUB_INSTALL_CCACHE_TO.
 if [ "${rc}" -eq 0 ] && [ -n "${STUB_INSTALL_CCACHE_TO:-}" ]; then
-  cp "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/ccache" "${STUB_INSTALL_CCACHE_TO}/ccache"
+  cp "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/ccache" "${STUB_INSTALL_CCACHE_TO}/ccache"
 fi
 exit "${rc}"
