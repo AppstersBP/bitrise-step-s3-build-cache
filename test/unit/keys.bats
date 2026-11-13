@@ -62,7 +62,7 @@ teardown() { teardown_env; }
 }
 
 @test "an invalid ignore pattern fails instead of hashing empty input" {
-  run key_hash_files '(' f1
+  run key_hash_files '[' f1
   [ "$status" -eq 1 ]
   [[ "$output" == *"invalid ignore pattern"* ]]
   [[ ! "$output" =~ [0-9a-f]{64} ]]
