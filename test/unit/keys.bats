@@ -1,5 +1,10 @@
 load ../helpers/common
 
+# Reference SHA-256 of stdin (sha256sum on Linux, shasum on macOS).
+sha256_ref() {
+  if command -v sha256sum >/dev/null 2>&1; then sha256sum; else shasum -a 256; fi
+}
+
 setup() {
   setup_env
   S3_CACHE_NO_MAIN=1 source ./step.sh
@@ -32,13 +37,13 @@ teardown() { teardown_env; }
 }
 
 @test "hash matches the existing key formula" {
-  expected=$(cat f1 f3 | grep -v -E '^\s*(versionCode|versionName)\b' | sha256sum | cut -d' ' -f1)
+  expected=$(cat f1 f3 | grep -v -E '^\s*(versionCode|versionName)\b' | sha256_ref | cut -d' ' -f1)
   [ "$(key_hash_files '^\s*(versionCode|versionName)\b' f1 f3)" = "$expected" ]
 }
 
 @test "files are concatenated in the order given" {
-  [ "$(key_hash_files 'zzz' f1 f3)" = "$(cat f1 f3 | sha256sum | cut -d' ' -f1)" ]
-  [ "$(key_hash_files 'zzz' f3 f1)" = "$(cat f3 f1 | sha256sum | cut -d' ' -f1)" ]
+  [ "$(key_hash_files 'zzz' f1 f3)" = "$(cat f1 f3 | sha256_ref | cut -d' ' -f1)" ]
+  [ "$(key_hash_files 'zzz' f3 f1)" = "$(cat f3 f1 | sha256_ref | cut -d' ' -f1)" ]
   [ "$(key_hash_files 'zzz' f1 f3)" != "$(key_hash_files 'zzz' f3 f1)" ]
 }
 
@@ -47,7 +52,7 @@ teardown() { teardown_env; }
   [ "$status" -eq 0 ]
   [[ "$output" == *"WARNING"* ]]
   [[ "$output" == *"nope"* ]]
-  expected=$(cat f1 | grep -v -E 'zzz' | sha256sum | cut -d' ' -f1)
+  expected=$(cat f1 | grep -v -E 'zzz' | sha256_ref | cut -d' ' -f1)
   [ "$(key_hash_files 'zzz' f1 nope 2>/dev/null)" = "$expected" ]
 
   run key_hash_files 'zzz' nope1 nope2
@@ -58,7 +63,7 @@ teardown() { teardown_env; }
   set -o pipefail
   run key_hash_files '.' f1
   [ "$status" -eq 0 ]
-  [ "$output" = "$(printf '' | sha256sum | cut -d' ' -f1)" ]
+  [ "$output" = "$(printf '' | sha256_ref | cut -d' ' -f1)" ]
 }
 
 @test "an invalid ignore pattern fails instead of hashing empty input" {
@@ -77,7 +82,8 @@ teardown() { teardown_env; }
 }
 
 @test "falls back to shasum -a 256 when sha256sum is unavailable" {
-  expected=$(cat f1 | grep -v -E 'zzz' | sha256sum | cut -d' ' -f1)
+  command -v sha256sum >/dev/null 2>&1 || skip "sha256sum is not installed here (the fallback is the normal path)"
+  expected=$(cat f1 | grep -v -E 'zzz' | sha256_ref | cut -d' ' -f1)
   # a PATH with the basic tools and a shasum that only accepts "-a 256", but no sha256sum
   mkdir "${TEST_TMP}/bin"
   for t in cat grep cut tr sed awk mktemp rm; do ln -s "$(command -v "$t")" "${TEST_TMP}/bin/$t"; done

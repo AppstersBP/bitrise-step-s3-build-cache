@@ -41,29 +41,31 @@ key_hash_files() {
     log_error "none of the key files exist"
     return 1
   fi
-  # Byte-exact pipeline (no command substitution on the data). grep exits 1 when
-  # it selects no line, which is fine; any other failure must not produce a key.
-  # grep is checked before cat: a grep that fails early makes cat die of SIGPIPE.
-  # The hash goes to a temporary file so that nothing is printed on failure.
-  local statuses out
-  out="$(mktemp)" || return 1
-  cat "${existing[@]}" | grep -v -E -- "${ignore}" | _key_sha256 >"${out}"
-  statuses=("${PIPESTATUS[@]}")
-  if [ "${statuses[1]}" -gt 1 ]; then
-    rm -f "${out}"
-    log_error "invalid ignore pattern: ${ignore}"
-    return 1
-  fi
-  if [ "${statuses[0]}" -ne 0 ]; then
-    rm -f "${out}"
+  # Byte-exact steps through temporary files (no command substitution on the data, and no
+  # PIPESTATUS, which differs between bash versions). grep exits 1 when it selects no line,
+  # which is fine; any other failure must not produce a key. Nothing is printed on failure.
+  local joined filtered out rc
+  joined="$(mktemp)" || return 1
+  filtered="$(mktemp)" || { rm -f "${joined}"; return 1; }
+  out="$(mktemp)" || { rm -f "${joined}" "${filtered}"; return 1; }
+  if ! cat "${existing[@]}" >"${joined}"; then
+    rm -f "${joined}" "${filtered}" "${out}"
     log_error "cannot read the key files"
     return 1
   fi
-  if [ "${statuses[2]}" -ne 0 ]; then
-    rm -f "${out}"
+  grep -v -E -- "${ignore}" "${joined}" >"${filtered}"
+  rc=$?
+  if [ "${rc}" -gt 1 ]; then
+    rm -f "${joined}" "${filtered}" "${out}"
+    log_error "invalid ignore pattern: ${ignore}"
+    return 1
+  fi
+  if ! _key_sha256 <"${filtered}" >"${out}"; then
+    rm -f "${joined}" "${filtered}" "${out}"
     log_error "cannot compute the SHA-256"
     return 1
   fi
+  rm -f "${joined}" "${filtered}"
   cat "${out}"
   rm -f "${out}"
 }
