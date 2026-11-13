@@ -40,35 +40,23 @@ archive_create() {
 }
 
 # archive_extract IN_FILE BASE_DIR
-# Extracts into a temporary directory inside BASE_DIR (same filesystem), then
-# moves the top-level entries into BASE_DIR, replacing entries of the same
-# name. A failed extraction leaves BASE_DIR unchanged. Creates BASE_DIR.
+# Verifies the whole archive first (full read and decompression); a damaged
+# archive fails before BASE_DIR is touched. Then extracts in place, merging
+# into BASE_DIR like `tar --zstd -xf IN -C BASE` (nothing else is removed).
+# Creates BASE_DIR. If the extraction itself fails, what was extracted stays.
 archive_extract() {
   local in="$1" base="$2"
+  if ! tar --zstd -tf "${in}" >/dev/null; then
+    log_error "archive_extract: ${in} is damaged or unreadable"
+    return 1
+  fi
   mkdir -p "${base}" || {
     log_error "archive_extract: cannot create ${base}"
     return 1
   }
-  local tmp
-  if ! tmp="$(mktemp -d "${base}/.s3cache-extract.XXXXXX")"; then
-    log_error "archive_extract: cannot create a temporary directory in ${base}"
+  if ! tar --zstd -xf "${in}" -C "${base}"; then
+    log_error "archive_extract: extraction of ${in} into ${base} failed"
     return 1
   fi
-  if ! tar --zstd -xf "${in}" -C "${tmp}"; then
-    rm -rf "${tmp}"
-    log_error "archive_extract: could not extract ${in}"
-    return 1
-  fi
-  local entry name
-  for entry in "${tmp}"/* "${tmp}"/.[!.]* "${tmp}"/..?*; do
-    [ -e "${entry}" ] || [ -L "${entry}" ] || continue
-    name="${entry##*/}"
-    if ! { rm -rf "${base:?}/${name}" && mv "${entry}" "${base}/${name}"; }; then
-      rm -rf "${tmp}"
-      log_error "archive_extract: could not move ${name} into ${base}"
-      return 1
-    fi
-  done
-  rm -rf "${tmp}"
   return 0
 }

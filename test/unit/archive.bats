@@ -30,14 +30,6 @@ teardown() { teardown_env; }
   [ -d plain/.gradle/wrapper ]
 }
 
-@test "damaged archive fails and leaves no partial output" {
-  printf garbage >bad.tar.zst
-  mkdir h4
-  run archive_extract bad.tar.zst h4
-  [ "$status" -ne 0 ]
-  [ -z "$(ls -A h4)" ]
-}
-
 @test "failed create leaves no output file" {
   mkdir h
   run archive_create out.tar.zst h does-not-exist
@@ -46,22 +38,35 @@ teardown() { teardown_env; }
   [ -z "$(ls -A . | grep -F out.tar.zst || true)" ]
 }
 
-@test "extract replaces existing top-level entries and keeps others" {
-  mkdir -p h/.gradle/wrapper h2/.gradle/old h2/other
-  archive_create out.tar.zst h .gradle/wrapper
+@test "extract merges into a BASE that already has other files" {
+  mkdir -p h/.gradle/caches/modules-2 h2/.gradle
+  printf 'org.gradle.jvmargs=-Xmx2g\n' >h2/.gradle/gradle.properties
+  archive_create out.tar.zst h .gradle/caches
   archive_extract out.tar.zst h2
-  [ -d h2/.gradle/wrapper ]
-  [ ! -e h2/.gradle/old ]
-  [ -d h2/other ]
-  [ -z "$(ls -A h2 | grep -F s3cache || true)" ]
-  [ -z "$(ls -A h2 | grep -F .s3cache || true)" ]
+  [ -d h2/.gradle/caches/modules-2 ]
+  [ "$(cat h2/.gradle/gradle.properties)" = "org.gradle.jvmargs=-Xmx2g" ]
 }
 
-@test "failed extract keeps existing content" {
-  mkdir -p h4/keep
+@test "two archives with sibling paths under .gradle both end up present" {
+  mkdir -p h/.gradle/caches/modules-2 h/.gradle/build-cache
+  archive_create deps.tar.zst h .gradle/caches
+  archive_create bc.tar.zst h .gradle/build-cache
+  archive_extract deps.tar.zst t
+  archive_extract bc.tar.zst t
+  [ -d t/.gradle/caches/modules-2 ]
+  [ -d t/.gradle/build-cache ]
+}
+
+@test "damaged archive returns 1 and leaves BASE exactly as before" {
+  mkdir -p h4/keep/sub
+  printf x >h4/keep/sub/f
   printf garbage >bad.tar.zst
+  find h4 | sort >before.txt
   run archive_extract bad.tar.zst h4
-  [ "$status" -ne 0 ]
-  [ -d h4/keep ]
-  [ "$(ls -A h4)" = keep ]
+  [ "$status" -eq 1 ]
+  find h4 | sort >after.txt
+  cmp before.txt after.txt
+  run archive_extract bad.tar.zst missing-base
+  [ "$status" -eq 1 ]
+  [ ! -e missing-base ]
 }
