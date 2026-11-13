@@ -36,19 +36,20 @@ key_hash_files() {
   fi
   # Byte-exact pipeline (no command substitution on the data). grep exits 1 when
   # it selects no line, which is fine; any other failure must not produce a key.
+  # grep is checked before cat: a grep that fails early makes cat die of SIGPIPE.
   # The hash goes to a temporary file so that nothing is printed on failure.
   local statuses out
   out="$(mktemp)" || return 1
   cat "${existing[@]}" | grep -v -E -- "${ignore}" | _key_sha256 >"${out}"
   statuses=("${PIPESTATUS[@]}")
-  if [ "${statuses[0]}" -ne 0 ]; then
-    rm -f "${out}"
-    log_error "cannot read the key files"
-    return 1
-  fi
   if [ "${statuses[1]}" -gt 1 ]; then
     rm -f "${out}"
     log_error "invalid ignore pattern: ${ignore}"
+    return 1
+  fi
+  if [ "${statuses[0]}" -ne 0 ]; then
+    rm -f "${out}"
+    log_error "cannot read the key files"
     return 1
   fi
   if [ "${statuses[2]}" -ne 0 ]; then
