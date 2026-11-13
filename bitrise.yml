@@ -8,7 +8,7 @@ workflows:
 
   audit-this-step:
     steps:
-    - script:
+    - git::https://github.com/bitrise-steplib/steps-script.git@master:
         title: Audit the step
         inputs:
         - content: |-
@@ -47,7 +47,7 @@ workflows:
     before_run:
     - audit-this-step
     steps:
-    - script:
+    - git::https://github.com/bitrise-steplib/steps-script.git@master:
         inputs:
         - content: |-
             #!/usr/bin/env bash
