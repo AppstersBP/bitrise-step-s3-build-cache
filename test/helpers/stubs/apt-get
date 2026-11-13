@@ -2,4 +2,9 @@
 # Stub for apt-get. Logs "apt-get <args>" to $STUB_LOG, prints $STUB_APT_GET_OUT, exits with $STUB_APT_GET_EXIT (default 0).
 echo "apt-get $*" >>"${STUB_LOG:-/dev/null}"
 [ -n "${STUB_APT_GET_OUT:-}" ] && printf '%s\n' "${STUB_APT_GET_OUT}"
-exit "${STUB_APT_GET_EXIT:-0}"
+rc="${STUB_APT_GET_EXIT:-0}"
+# Simulate a successful installation: place a ccache stub into $STUB_INSTALL_CCACHE_TO.
+if [ "${rc}" -eq 0 ] && [ -n "${STUB_INSTALL_CCACHE_TO:-}" ]; then
+  cp "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/ccache" "${STUB_INSTALL_CCACHE_TO}/ccache"
+fi
+exit "${rc}"

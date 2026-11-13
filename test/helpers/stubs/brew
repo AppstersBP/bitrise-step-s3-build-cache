@@ -2,4 +2,9 @@
 # Stub for brew. Logs "brew <args>" to $STUB_LOG, prints $STUB_BREW_OUT, exits with $STUB_BREW_EXIT (default 0).
 echo "brew $*" >>"${STUB_LOG:-/dev/null}"
 [ -n "${STUB_BREW_OUT:-}" ] && printf '%s\n' "${STUB_BREW_OUT}"
-exit "${STUB_BREW_EXIT:-0}"
+rc="${STUB_BREW_EXIT:-0}"
+# Simulate a successful installation: place a ccache stub into $STUB_INSTALL_CCACHE_TO.
+if [ "${rc}" -eq 0 ] && [ -n "${STUB_INSTALL_CCACHE_TO:-}" ]; then
+  cp "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/ccache" "${STUB_INSTALL_CCACHE_TO}/ccache"
+fi
+exit "${rc}"

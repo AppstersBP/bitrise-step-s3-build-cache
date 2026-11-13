@@ -11,6 +11,11 @@ _state_export() {
   export "${key}=${value}"
 }
 
+# env_export KEY VALUE: set an environment variable for later steps and this shell.
+env_export() {
+  _state_export "$1" "$2"
+}
+
 # _state_id CACHE_ID: upper-case, '-' -> '_'.
 _state_id() {
   printf '%s' "$1" | tr 'a-z-' 'A-Z_'

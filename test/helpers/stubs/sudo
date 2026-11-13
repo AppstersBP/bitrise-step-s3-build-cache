@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+# Stub for sudo. Logs "sudo <args>" to $STUB_LOG. "sudo -n true" exits with $STUB_SUDO_EXIT (default 1: password
+# required). Any other call is run as the given command without privileges.
+echo "sudo $*" >>"${STUB_LOG:-/dev/null}"
+if [ "$*" = "-n true" ]; then
+  exit "${STUB_SUDO_EXIT:-1}"
+fi
+[ "${1:-}" = "-n" ] && shift
+exec "$@"

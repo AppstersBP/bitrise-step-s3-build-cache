@@ -43,3 +43,15 @@ teardown() { teardown_env; }
   run state_set X y
   [ "$status" -ne 0 ]
 }
+
+@test "env_export sets a variable through envman and the current shell" {
+  env_export CCACHE_DIR /some/dir
+  assert_called "envman add --key CCACHE_DIR --value /some/dir"
+  [ "${CCACHE_DIR}" = /some/dir ]
+}
+
+@test "env_export fails when envman fails" {
+  export STUB_ENVMAN_EXIT=1
+  run env_export CCACHE_DIR /some/dir
+  [ "$status" -ne 0 ]
+}
