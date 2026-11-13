@@ -52,3 +52,82 @@ jobs:
         run: brew install bats-core zstd
       - name: Unit tests
         run: bats test/unit
+
+  # End-to-end tests: the sample app is built twice with the step around each build (see the
+  # e2e-* workflows in bitrise.yml). Nothing is cached by GitHub Actions itself.
+  e2e-android:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      BITRISE_GIT_BRANCH: ${{ github.ref_name }}
+      BITRISE_BUILD_NUMBER: ${{ github.run_number }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install the Bitrise CLI
+        run: |
+          mkdir -p "$HOME/.local/bin"
+          curl -fsSL -o "$HOME/.local/bin/bitrise" \
+            https://github.com/bitrise-io/bitrise/releases/latest/download/bitrise-Linux-x86_64
+          chmod +x "$HOME/.local/bin/bitrise"
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+          echo "E2E_LOG_DIR=$RUNNER_TEMP/e2e-logs" >> "$GITHUB_ENV"
+      - name: Check the tools
+        run: |
+          aws --version
+          zstd --version
+          echo "ANDROID_HOME=$ANDROID_HOME"
+      - name: End-to-end test (Android)
+        run: bitrise run e2e-android
+      - name: Upload the logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-android-logs
+          path: ${{ env.E2E_LOG_DIR }}
+          if-no-files-found: ignore
+
+  e2e-ios:
+    runs-on: macos-latest
+    timeout-minutes: 60
+    env:
+      BITRISE_GIT_BRANCH: ${{ github.ref_name }}
+      BITRISE_BUILD_NUMBER: ${{ github.run_number }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install zstd and the Bitrise CLI
+        run: |
+          brew install zstd
+          mkdir -p "$HOME/.local/bin"
+          curl -fsSL -o "$HOME/.local/bin/bitrise" \
+            "https://github.com/bitrise-io/bitrise/releases/latest/download/bitrise-Darwin-$(uname -m)"
+          chmod +x "$HOME/.local/bin/bitrise"
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+          echo "E2E_LOG_DIR=$RUNNER_TEMP/e2e-logs" >> "$GITHUB_ENV"
+      - name: Check the tools
+        run: |
+          aws --version
+          pod --version
+          xcodebuild -version
+      - name: End-to-end test (iOS)
+        run: bitrise run e2e-ios
+      - name: Upload the logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-ios-logs
+          path: |
+            ${{ env.E2E_LOG_DIR }}
+            e2e/sample-app/ios/Podfile.lock
+            e2e/sample-app/ios/sampleapp.xcodeproj/project.pbxproj
+            e2e/sample-app/ios/sampleapp.xcworkspace
+          if-no-files-found: ignore
