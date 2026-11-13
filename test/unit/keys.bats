@@ -91,3 +91,14 @@ teardown() { teardown_env; }
   [ "$status" -eq 0 ]
   [ "$output" = "$expected" ]
 }
+
+@test "key_hash_file hashes the exact bytes, including a missing final newline" {
+  printf 'x\r\n\n# c\nlast' >raw
+  [ "$(key_hash_file raw)" = "$(shasum -a 256 raw | cut -d' ' -f1)" ]
+}
+
+@test "key_hash_file fails for a missing file" {
+  run key_hash_file nothere
+  [ "$status" -eq 1 ]
+  [ -z "$output" ]
+}

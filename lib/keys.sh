@@ -16,6 +16,13 @@ _key_sha256() {
   fi
 }
 
+# key_hash_file FILE: prints the SHA-256 of the exact bytes of FILE (no line
+# filtering, unlike key_hash_files). Returns 1 if the file cannot be read.
+key_hash_file() {
+  [ -f "$1" ] && [ -r "$1" ] || return 1
+  _key_sha256 <"$1"
+}
+
 # key_hash_files IGNORE_REGEX FILE...: prints the SHA-256 of the files concatenated
 # in the given order, without the lines matching IGNORE_REGEX (grep -E).
 # Missing files are skipped with a warning; returns 1 if none exists.
