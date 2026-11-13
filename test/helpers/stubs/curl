@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+# Stub for curl. Logs "curl <args>" to $STUB_LOG, prints $STUB_CURL_OUT, exits with $STUB_CURL_EXIT (default 0).
+echo "curl $*" >>"${STUB_LOG:-/dev/null}"
+[ -n "${STUB_CURL_OUT:-}" ] && printf '%s\n' "${STUB_CURL_OUT}"
+exit "${STUB_CURL_EXIT:-0}"

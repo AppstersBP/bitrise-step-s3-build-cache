@@ -1,0 +1,52 @@
+#!/usr/bin/env bash
+# Stub for the AWS CLI. Logs "aws <args>" to $STUB_LOG, then dispatches on subcommand:
+#   s3api head-bucket    exit STUB_AWS_HEAD_BUCKET_EXIT (default 0)
+#   s3api list-objects-v2 stdout STUB_AWS_LIST_OUT, exit STUB_AWS_LIST_EXIT (default 0)
+#   s3api copy-object    exit STUB_AWS_COPY_EXIT (default 0)
+#   s3 cp s3://... DEST  copy STUB_AWS_GET_FILE to DEST if set, else exit STUB_AWS_GET_EXIT (default 1)
+#   s3 cp LOCAL s3://... exit STUB_AWS_PUT_EXIT (default 0)
+echo "aws $*" >>"${STUB_LOG:-/dev/null}"
+
+case "${1:-} ${2:-}" in
+  "s3api head-bucket")
+    exit "${STUB_AWS_HEAD_BUCKET_EXIT:-0}"
+    ;;
+  "s3api list-objects-v2")
+    [ -n "${STUB_AWS_LIST_OUT:-}" ] && printf '%s\n' "${STUB_AWS_LIST_OUT}"
+    exit "${STUB_AWS_LIST_EXIT:-0}"
+    ;;
+  "s3api copy-object")
+    exit "${STUB_AWS_COPY_EXIT:-0}"
+    ;;
+  "s3 cp")
+    src=""
+    dest=""
+    shift 2
+    while [ $# -gt 0 ]; do
+      case "$1" in
+        --*) # options: skip the ones that take a value
+          case "$1" in
+            --cli-connect-timeout | --endpoint-url | --region | --profile | --metadata-directive | --content-type) shift ;;
+          esac
+          ;;
+        *)
+          if [ -z "${src}" ]; then src="$1"; else dest="$1"; fi
+          ;;
+      esac
+      shift
+    done
+    case "${src}" in
+      s3://*)
+        if [ -n "${STUB_AWS_GET_FILE:-}" ]; then
+          cp "${STUB_AWS_GET_FILE}" "${dest}"
+          exit $?
+        fi
+        exit "${STUB_AWS_GET_EXIT:-1}"
+        ;;
+      *)
+        exit "${STUB_AWS_PUT_EXIT:-0}"
+        ;;
+    esac
+    ;;
+esac
+exit 0

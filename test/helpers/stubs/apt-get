@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+# Stub for apt-get. Logs "apt-get <args>" to $STUB_LOG, prints $STUB_APT_GET_OUT, exits with $STUB_APT_GET_EXIT (default 0).
+echo "apt-get $*" >>"${STUB_LOG:-/dev/null}"
+[ -n "${STUB_APT_GET_OUT:-}" ] && printf '%s\n' "${STUB_APT_GET_OUT}"
+exit "${STUB_APT_GET_EXIT:-0}"

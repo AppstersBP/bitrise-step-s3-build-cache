@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+# Stub for envman. Logs "envman <args>" to $STUB_LOG, prints $STUB_ENVMAN_OUT, exits with $STUB_ENVMAN_EXIT (default 0).
+echo "envman $*" >>"${STUB_LOG:-/dev/null}"
+[ -n "${STUB_ENVMAN_OUT:-}" ] && printf '%s\n' "${STUB_ENVMAN_OUT}"
+exit "${STUB_ENVMAN_EXIT:-0}"

@@ -1,0 +1,177 @@
+title: S3 Build Cache
+summary: Restores and saves build caches (Gradle, ccache, CocoaPods) in S3-compatible storage.
+description: |-
+  Restores and saves build caches in S3-compatible storage such as MinIO, AWS S3 or Cloudflare R2.
+
+  Supported caches: `gradle-deps`, `gradle-build-cache`, `ccache` and `cocoapods`.
+  Add the step twice to a workflow: once with `mode: restore` before the build and once with
+  `mode: save` after it. Storage problems never fail the build; only configuration errors do.
+
+  See the [README](https://github.com/AppstersBP/bitrise-step-s3-build-cache#configuration) for the configuration.
+website: https://github.com/AppstersBP/bitrise-step-s3-build-cache
+source_code_url: https://github.com/AppstersBP/bitrise-step-s3-build-cache
+support_url: https://github.com/AppstersBP/bitrise-step-s3-build-cache/issues
+type_tags:
+- utility
+is_always_run: false
+is_skippable: true
+toolkit:
+  bash:
+    entry_file: step.sh
+inputs:
+- mode: restore
+  opts:
+    title: Mode
+    summary: Whether to restore the caches before the build or save them after it.
+    description: |-
+      `restore` downloads the selected caches from the storage. `save` uploads them.
+      Use the step once with each value in the same workflow.
+    is_required: true
+    value_options:
+    - restore
+    - save
+- caches: ""
+  opts:
+    title: Caches
+    summary: The caches to handle, one per line.
+    description: |-
+      Newline-separated list of cache names. Allowed names: `gradle-deps`,
+      `gradle-build-cache`, `ccache`, `cocoapods`. Blank lines and duplicates are ignored.
+    is_required: true
+- endpoint: $S3_CACHE_ENDPOINT
+  opts:
+    title: Endpoint
+    summary: URL of the S3-compatible storage. Leave empty for AWS S3.
+    description: |-
+      Endpoint URL of the storage, for example `https://minio.example.com`.
+      Defaults to the variable `$S3_CACHE_ENDPOINT`. Leave empty to use AWS S3.
+    is_required: false
+- bucket: $S3_CACHE_BUCKET
+  opts:
+    title: Bucket
+    summary: Name of the bucket that holds the caches.
+    description: |-
+      Bucket name. Defaults to the variable `$S3_CACHE_BUCKET`.
+    is_required: false
+- prefix: $S3_CACHE_PREFIX
+  opts:
+    title: Prefix
+    summary: Key prefix (folder) inside the bucket, normally one per project.
+    description: |-
+      Objects are stored below this prefix. Defaults to the variable `$S3_CACHE_PREFIX`.
+    is_required: false
+- region: $S3_CACHE_REGION
+  opts:
+    title: Region
+    summary: Region of the bucket. Empty means `us-east-1`.
+    description: |-
+      Region of the bucket. Defaults to the variable `$S3_CACHE_REGION`.
+      When it is empty, `us-east-1` is used, which suits MinIO and R2.
+    is_required: false
+- access_key_id: $S3_CACHE_ACCESS_KEY_ID
+  opts:
+    title: Access key ID
+    summary: Access key ID for the storage.
+    description: |-
+      Access key ID. Defaults to the variable `$S3_CACHE_ACCESS_KEY_ID`, which should be a secret.
+    is_required: false
+    is_expand: true
+    is_sensitive: true
+- secret_access_key: $S3_CACHE_SECRET_ACCESS_KEY
+  opts:
+    title: Secret access key
+    summary: Secret access key for the storage.
+    description: |-
+      Secret access key. Defaults to the variable `$S3_CACHE_SECRET_ACCESS_KEY`, which must be a secret.
+    is_required: false
+    is_expand: true
+    is_sensitive: true
+- gradle_key_files: |-
+    android/gradle.properties
+    android/build.gradle
+    android/app/build.gradle
+    pnpm-lock.yaml
+  opts:
+    title: Gradle key files
+    summary: Files whose content forms the key of the Gradle dependency cache.
+    description: |-
+      Newline-separated paths relative to the source directory. Missing files are skipped.
+      The default is the list `android/gradle.properties`, `android/build.gradle`,
+      `android/app/build.gradle` and `pnpm-lock.yaml`.
+    is_required: false
+- gradle_key_ignore_pattern: '^\s*(versionCode|versionName)\b'
+  opts:
+    title: Gradle key ignore pattern
+    summary: Lines matching this regular expression do not count towards the Gradle key.
+    description: |-
+      Extended regular expression. Matching lines are left out when the key files are hashed,
+      so that version bumps do not invalidate the cache. The default is `^\s*(versionCode|versionName)\b`.
+    is_required: false
+- fallback_branch: main
+  opts:
+    title: Fallback branch
+    summary: Branch whose branch-keyed caches are used when the current branch has none.
+    description: |-
+      Used for `gradle-build-cache` and `ccache`. The default is `main`.
+    is_required: false
+- cocoapods_lockfile: ios/Podfile.lock
+  opts:
+    title: CocoaPods lockfile
+    summary: Lockfile whose content forms the key of the CocoaPods cache.
+    description: |-
+      Path relative to the source directory. The default is `ios/Podfile.lock`.
+    is_required: false
+- cocoapods_dir: ios/Pods
+  opts:
+    title: CocoaPods directory
+    summary: Directory that is cached for CocoaPods.
+    description: |-
+      Path relative to the source directory. The default is `ios/Pods`.
+    is_required: false
+- ccache_max_size: 5G
+  opts:
+    title: ccache maximum size
+    summary: Maximum size of the ccache cache.
+    description: |-
+      Value for `ccache --max-size`. The default is `5G`.
+    is_required: false
+- connect_timeout: 10
+  opts:
+    title: Connect timeout
+    summary: Connection timeout for the storage in seconds.
+    description: |-
+      Passed to the AWS CLI as `--cli-connect-timeout`. The default is `10`.
+    is_required: false
+outputs:
+- S3_CACHE_RESULT_GRADLE_DEPS:
+  opts:
+    title: Gradle dependencies restore result
+    summary: One of exact, fallback, none, skipped.
+- S3_CACHE_RESULT_GRADLE_BUILD_CACHE:
+  opts:
+    title: Gradle build cache restore result
+    summary: One of exact, fallback, none, skipped.
+- S3_CACHE_RESULT_CCACHE:
+  opts:
+    title: ccache restore result
+    summary: One of exact, fallback, none, skipped.
+- S3_CACHE_RESULT_COCOAPODS:
+  opts:
+    title: CocoaPods restore result
+    summary: One of exact, fallback, none, skipped.
+- S3_CACHE_SAVE_GRADLE_DEPS:
+  opts:
+    title: Gradle dependencies save result
+    summary: One of uploaded, refreshed, skipped, failed.
+- S3_CACHE_SAVE_GRADLE_BUILD_CACHE:
+  opts:
+    title: Gradle build cache save result
+    summary: One of uploaded, refreshed, skipped, failed.
+- S3_CACHE_SAVE_CCACHE:
+  opts:
+    title: ccache save result
+    summary: One of uploaded, refreshed, skipped, failed.
+- S3_CACHE_SAVE_COCOAPODS:
+  opts:
+    title: CocoaPods save result
+    summary: One of uploaded, refreshed, skipped, failed.

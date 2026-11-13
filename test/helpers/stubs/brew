@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+# Stub for brew. Logs "brew <args>" to $STUB_LOG, prints $STUB_BREW_OUT, exits with $STUB_BREW_EXIT (default 0).
+echo "brew $*" >>"${STUB_LOG:-/dev/null}"
+[ -n "${STUB_BREW_OUT:-}" ] && printf '%s\n' "${STUB_BREW_OUT}"
+exit "${STUB_BREW_EXIT:-0}"

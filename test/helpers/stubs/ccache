@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+# Stub for ccache. Logs "ccache <args>" to $STUB_LOG, prints $STUB_CCACHE_OUT, exits with $STUB_CCACHE_EXIT (default 0).
+echo "ccache $*" >>"${STUB_LOG:-/dev/null}"
+[ -n "${STUB_CCACHE_OUT:-}" ] && printf '%s\n' "${STUB_CCACHE_OUT}"
+exit "${STUB_CCACHE_EXIT:-0}"
