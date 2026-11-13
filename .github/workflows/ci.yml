@@ -25,7 +25,7 @@ jobs:
           chmod +x "$HOME/.local/bin/bitrise" "$HOME/.local/bin/stepman"
           echo "$HOME/.local/bin" >> "$GITHUB_PATH"
       - name: shellcheck
-        run: shellcheck step.sh lib/*.sh test/helpers/stubs/*
+        run: shellcheck step.sh lib/*.sh e2e/scripts/*.sh test/helpers/stubs/*
       - name: Audit the step
         run: bitrise run audit-this-step
       - name: Unit tests

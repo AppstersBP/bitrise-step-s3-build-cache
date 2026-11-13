@@ -2,9 +2,86 @@ format_version: "11"
 default_step_lib_source: https://github.com/bitrise-io/bitrise-steplib.git
 
 workflows:
+  # Runs the step from this checkout against a local MinIO: save, restore and save again
+  # for gradle-deps, with a fabricated Gradle home in a temporary directory (HOME is
+  # switched to it after the first step) so that the real ~/.gradle is never touched.
   test:
-    # Filled in Task 10.
-    steps: []
+    steps:
+    - git::https://github.com/bitrise-steplib/steps-script.git@master:
+        title: Start MinIO and fabricate a Gradle home
+        inputs:
+        - content: |-
+            #!/usr/bin/env bash
+            set -eo pipefail
+            eval "$(e2e/scripts/start-minio.sh)"
+            envman add --key S3_CACHE_ENDPOINT --value "${S3_CACHE_ENDPOINT}"
+            envman add --key S3_CACHE_BUCKET --value "${S3_CACHE_BUCKET}"
+            envman add --key S3_CACHE_ACCESS_KEY_ID --value "${S3_CACHE_ACCESS_KEY_ID}"
+            envman add --key S3_CACHE_SECRET_ACCESS_KEY --value "${S3_CACHE_SECRET_ACCESS_KEY}"
+            envman add --key S3_CACHE_PREFIX --value "step-test"
+            envman add --key S3_CACHE_REGION --value "us-east-1"
+
+            work="$(mktemp -d "${TMPDIR:-/tmp}/s3-cache-step-test.XXXXXX")"
+            mkdir -p "${work}/home/.gradle/caches/modules-2" "${work}/src"
+            echo "dependency" > "${work}/home/.gradle/caches/modules-2/x"
+            echo "org.gradle.jvmargs=-Xmx1g" > "${work}/src/gradle.properties"
+            envman add --key S3_TEST_DIR --value "${work}"
+            envman add --key S3_TEST_HOME --value "${work}/home"
+            # From here on every step sees the temporary directory as its home, so the real
+            # ~/.gradle of this machine is never read or written. (Bitrise has no per-step envs.)
+            envman add --key HOME --value "${work}/home"
+            envman add --key S3_TEST_SRC --value "${work}/src"
+    - path::./:
+        title: Save the Gradle dependencies
+        inputs:
+        - mode: save
+        - caches: gradle-deps
+        - gradle_key_files: $S3_TEST_SRC/gradle.properties
+    - git::https://github.com/bitrise-steplib/steps-script.git@master:
+        title: Check the first save and remove the Gradle home
+        inputs:
+        - content: |-
+            #!/usr/bin/env bash
+            set -eo pipefail
+            [ "${S3_CACHE_SAVE_GRADLE_DEPS}" = uploaded ] || { echo "expected uploaded, got '${S3_CACHE_SAVE_GRADLE_DEPS}'"; exit 1; }
+            [ -n "${S3_TEST_HOME}" ] && [ -d "${S3_TEST_HOME}/.gradle" ]
+            rm -rf "${S3_TEST_HOME}/.gradle"
+    - path::./:
+        title: Restore the Gradle dependencies
+        inputs:
+        - mode: restore
+        - caches: gradle-deps
+        - gradle_key_files: $S3_TEST_SRC/gradle.properties
+    - git::https://github.com/bitrise-steplib/steps-script.git@master:
+        title: Check the restore
+        inputs:
+        - content: |-
+            #!/usr/bin/env bash
+            set -eo pipefail
+            [ "${S3_CACHE_RESULT_GRADLE_DEPS}" = exact ] || { echo "expected exact, got '${S3_CACHE_RESULT_GRADLE_DEPS}'"; exit 1; }
+            [ "$(cat "${S3_TEST_HOME}/.gradle/caches/modules-2/x")" = dependency ]
+    - path::./:
+        title: Save the Gradle dependencies again
+        inputs:
+        - mode: save
+        - caches: gradle-deps
+        - gradle_key_files: $S3_TEST_SRC/gradle.properties
+    - git::https://github.com/bitrise-steplib/steps-script.git@master:
+        title: Check the second save
+        inputs:
+        - content: |-
+            #!/usr/bin/env bash
+            set -eo pipefail
+            [ "${S3_CACHE_SAVE_GRADLE_DEPS}" = refreshed ] || { echo "expected refreshed, got '${S3_CACHE_SAVE_GRADLE_DEPS}'"; exit 1; }
+    - git::https://github.com/bitrise-steplib/steps-script.git@master:
+        title: Stop MinIO and clean up
+        is_always_run: true
+        inputs:
+        - content: |-
+            #!/usr/bin/env bash
+            e2e/scripts/stop-minio.sh
+            [ -n "${S3_TEST_DIR}" ] && rm -rf "${S3_TEST_DIR}"
+            exit 0
 
   audit-this-step:
     steps:

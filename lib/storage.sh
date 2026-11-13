@@ -42,11 +42,20 @@ storage_init() {
   [ -n "${STORAGE_ENDPOINT}" ] && STORAGE_ARGS+=(--endpoint-url "${STORAGE_ENDPOINT}")
 
   if [ -n "${STORAGE_ENDPOINT}" ]; then
-    # shellcheck disable=SC2001 # a regular expression is needed to drop the userinfo part
-    log_info "Storage: bucket ${CFG_BUCKET} at $(printf '%s' "${STORAGE_ENDPOINT}" | sed 's#^\([A-Za-z][A-Za-z0-9+.-]*://\)[^/@]*@#\1#') (path-style addressing)"
+    log_info "Storage: bucket ${CFG_BUCKET} at $(storage_endpoint_label) (path-style addressing)"
   else
     log_info "Storage: bucket ${CFG_BUCKET} on AWS S3, region ${CFG_REGION}"
   fi
+}
+
+# storage_endpoint_label: the endpoint without userinfo for messages, "AWS S3" if there is none.
+storage_endpoint_label() {
+  if [ -z "${STORAGE_ENDPOINT}" ]; then
+    printf 'AWS S3'
+    return 0
+  fi
+  # shellcheck disable=SC2001 # a regular expression is needed to drop the userinfo part
+  printf '%s' "${STORAGE_ENDPOINT}" | sed 's#^\([A-Za-z][A-Za-z0-9+.-]*://\)[^/@]*@#\1#'
 }
 
 # storage_reachable: 0 if the bucket answers within about 5 seconds (single attempt).
