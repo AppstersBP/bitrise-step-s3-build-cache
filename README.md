@@ -57,15 +57,18 @@ Every line the step prints starts with `[s3-build-cache]` or, for a cache, `[s3-
 | Message | Meaning |
 |---|---|
 | `Missing S3 build cache settings:` followed by a list | A required input is empty or invalid. This is the only message that fails the build. |
-| `Skipping the S3 build cache: the secrets ... are empty in this pull request build.` | A pull request build without credentials. All selected caches are reported as `skipped`. |
+| `Skipping the S3 build cache: the secrets S3_CACHE_ACCESS_KEY_ID and S3_CACHE_SECRET_ACCESS_KEY are empty in this pull request build.` | A pull request build without credentials. All selected caches are reported as `skipped`. |
+| `Bitrise does not expose secrets to pull request builds unless "Expose for Pull Requests" is enabled for them, so these secrets are not available to pull request builds.` | Second line of the same notice. |
 | `Storage: bucket <bucket> at <endpoint> (path-style addressing)` / `Storage: bucket <bucket> on AWS S3, region <region>` | The storage that is used. Credentials in the endpoint are not printed. |
 | `S3 storage is unreachable at <endpoint> — restoring no caches` / `— saving no caches` | The bucket did not answer within about 5 seconds. All selected caches are reported as `skipped` and the build continues. |
-| `Cannot prepare the storage access, continuing without caches` | The temporary AWS configuration could not be created. |
+| `Cannot create a temporary directory for the AWS configuration.` | The temporary AWS configuration could not be created. |
+| `Cannot prepare the storage access, continuing without caches` | Follows the line above. All selected caches are reported as `skipped`. |
 | `<mode>: <cache>=<result>, ...` | Summary of the run. |
 | `BITRISE_GIT_BRANCH is empty, using the branch name "unknown"` | The branch is not known; branch-keyed caches use `unknown`. |
 | `key file not found, skipped: <file>` | A file listed in `gradle_key_files` does not exist. |
 | `none of the key files exist` / `cannot read the key files` / `cannot compute the SHA-256` / `invalid ignore pattern: <pattern>` | The cache key could not be computed. |
-| `<cache>: failed unexpectedly (exit status <n>), continuing without it` | An internal error in one cache. The cache is reported as `none` (restore) or `failed` (save) and the other caches still run. |
+| `[s3-build-cache:<cache>] failed unexpectedly (exit status <n>), continuing without it` | An internal error in one cache. The cache is reported as `none` (restore) or `failed` (save) and the other caches still run. |
+| `[s3-build-cache:<cache>] set no result, continuing without it` | A cache finished without reporting a result. It is reported as `none` (restore) or `failed` (save). |
 | `archive_create: ...`, `archive_extract: ...` | The archive could not be created, or it is damaged or cannot be extracted. |
 | `envman could not set <name>` | An output or variable could not be exported. |
 
@@ -126,7 +129,7 @@ Every line the step prints starts with `[s3-build-cache]` or, for a cache, `[s3-
 
 The step never deletes anything from the bucket. Archives of old branches and old dependency sets stay until the storage removes them, so set a lifecycle rule on the bucket that expires objects below the prefix of your project.
 
-Every save of an unchanged `gradle-deps` or `cocoapods` archive renews its date (`date renewed`), and the branch-keyed caches (`gradle-build-cache`, `ccache`) are uploaded again on every save. A rule of N days therefore means "not saved for N days", and the archives that builds still use are not removed.
+Saving an unchanged `gradle-deps` or `cocoapods` archive renews its date (`date renewed`), and the branch-keyed caches (`gradle-build-cache`, `ccache`) are uploaded again on every save. Archives that are saved (or, for `gradle-deps` and `cocoapods`, reused unchanged) at least every N days are therefore not removed by a rule of N days.
 
 MinIO, with the MinIO client (`<N>` is the number of days):
 

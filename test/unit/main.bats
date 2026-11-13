@@ -113,3 +113,41 @@ teardown() { teardown_env; }
   run main
   [[ "$output" != *SECRETVALUE123* ]]
 }
+
+@test "a cache that exits with status 0 but sets no result is marked none" {
+  cache_gradle_deps_restore() { :; }
+  run main
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"[s3-build-cache:gradle-deps] set no result, continuing without it"* ]]
+  [[ "$output" != *"failed unexpectedly"* ]]
+  assert_called "S3_CACHE_RESULT_GRADLE_DEPS --value none"
+}
+
+@test "a cache that exits is contained when no temporary file can be made" {
+  mktemp() { case "$*" in *s3-build-cache-main*) return 1 ;; *) command mktemp "$@" ;; esac; }
+  export caches=$'gradle-deps\nccache'
+  cache_gradle_deps_restore() { exit 3; }
+  cache_ccache_restore() { out_result ccache exact; }
+  run main
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"[s3-build-cache:gradle-deps] failed unexpectedly (exit status 3), continuing without it"* ]]
+  assert_called "S3_CACHE_RESULT_GRADLE_DEPS --value none"
+  assert_called "S3_CACHE_RESULT_CCACHE --value exact"
+}
+
+@test "storage_init failure marks all caches skipped and exits 0" {
+  export caches=$'gradle-deps\nccache'
+  storage_init() { return 1; }
+  run main
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"Cannot prepare the storage access, continuing without caches"* ]]
+  assert_called "S3_CACHE_RESULT_GRADLE_DEPS --value skipped"
+  assert_called "S3_CACHE_RESULT_CCACHE --value skipped"
+  refute_called "aws"
+}
+
+@test "invalid mode in a pull request build without credentials exits 1" {
+  export BITRISE_PULL_REQUEST=7 access_key_id="" secret_access_key="" mode=foo
+  run main
+  [ "$status" -eq 1 ]
+}

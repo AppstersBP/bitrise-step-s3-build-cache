@@ -125,3 +125,12 @@ teardown() { teardown_env; }
   run cfg_validate
   [ "$status" -eq 0 ]
 }
+
+@test "invalid mode or unknown cache is an error even in a pull request build without credentials" {
+  export BITRISE_PULL_REQUEST=12 access_key_id="" secret_access_key="" mode=foo caches=$'gradle-deps\nfoo'
+  cfg_init
+  run cfg_validate
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"mode: 'foo' is not restore or save"* ]]
+  [[ "$output" == *"caches: unknown cache 'foo'"* ]]
+}

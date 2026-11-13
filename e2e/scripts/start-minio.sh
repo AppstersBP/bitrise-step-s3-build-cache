@@ -8,7 +8,7 @@ set -euo pipefail
 # MinIO no longer publishes images or binaries itself; the community build of the
 # same server is used (identical command line and S3 behaviour).
 MINIO_RELEASE="RELEASE.2026-08-04T00-00-00Z"
-MINIO_IMAGE="pgsty/minio:${MINIO_RELEASE}"
+MINIO_IMAGE="pgsty/minio:${MINIO_RELEASE}@sha256:b6bfe7239bfc83fb90d31612d9704d86039dd714f7904b3f1ad68f211e602372"
 MINIO_BINARY_VERSION="20260804000000.0.0"
 MINIO_BINARY_URL="https://github.com/pgsty/minio/releases/download/${MINIO_RELEASE}"
 
@@ -47,7 +47,7 @@ start_docker() {
   id="$(docker run -d -p "127.0.0.1:${PORT}:9000" \
     -e "MINIO_ROOT_USER=${ACCESS_KEY}" -e "MINIO_ROOT_PASSWORD=${SECRET_KEY}" \
     "${MINIO_IMAGE}" server /data)" || return 1
-  printf 'docker %s\n' "${id}" >"${STATE_FILE}"
+  printf 'docker %s %s\n' "${id}" "${HOME}" >"${STATE_FILE}"
   say "started container ${id:0:12} on port ${PORT}"
 }
 
@@ -65,14 +65,18 @@ start_binary() {
   esac
   dir="$(mktemp -d "${TMPDIR:-/tmp}/s3-build-cache-minio.XXXXXX")"
   archive="minio_${MINIO_BINARY_VERSION}_${os}_${arch}.tar.gz"
+  case "${os}-${arch}" in
+    linux-amd64) sum=3c1d229209db049618cb9c6d4132fa2882b15cdded337511486e811c187eec08 ;;
+    linux-arm64) sum=6c2c056a065635d943980cdcb3180247cf1a7a578b81a5271f0807569ca120e9 ;;
+    darwin-amd64) sum=1ad740f70ef16463e99825b7887ae330fee7de879dd357616d781ff819cbaaad ;;
+    darwin-arm64) sum=a1965c422ec9ca80068bcd2c2c115655748283916256cebd75c171cc629ade6e ;;
+  esac
   say "downloading ${archive}"
-  if ! { curl -fsSL -o "${dir}/${archive}" "${MINIO_BINARY_URL}/${archive}" &&
-    curl -fsSL -o "${dir}/checksums.txt" "${MINIO_BINARY_URL}/minio_${MINIO_BINARY_VERSION}_checksums.txt"; }; then
+  if ! curl -fsSL -o "${dir}/${archive}" "${MINIO_BINARY_URL}/${archive}"; then
     rm -rf "${dir}"
     return 1
   fi
-  sum="$(awk -v f="${archive}" '$2 == f { print $1 }' "${dir}/checksums.txt")"
-  if [ -z "${sum}" ] || [ "$( (sha256sum "${dir}/${archive}" 2>/dev/null || shasum -a 256 "${dir}/${archive}") | awk '{ print $1 }')" != "${sum}" ]; then
+  if [ "$( (sha256sum "${dir}/${archive}" 2>/dev/null || shasum -a 256 "${dir}/${archive}") | awk '{ print $1 }')" != "${sum}" ]; then
     say "checksum of ${archive} does not match"
     rm -rf "${dir}"
     return 1
@@ -98,7 +102,7 @@ else
 fi
 
 for _ in $(seq 1 60); do
-  curl -fsS -o /dev/null "${ENDPOINT}/minio/health/ready" 2>/dev/null && ready=1 && break
+  curl -fsS --max-time 2 -o /dev/null "${ENDPOINT}/minio/health/ready" 2>/dev/null && ready=1 && break
   sleep 1
 done
 if [ -z "${ready:-}" ]; then

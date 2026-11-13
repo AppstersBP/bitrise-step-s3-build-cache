@@ -36,11 +36,21 @@ _main_run_cache() {
     value="$(cat "${tmp}" 2>/dev/null)"
     rm -f "${tmp}"
   else
-    "${fn}" || rc=$?
-    value="${!out_var:-}"
+    value="$(
+      (
+        "${fn}"
+        rc=$?
+        printf '%s' "${!out_var:-}"
+        exit "${rc}"
+      )
+    )" || rc=$?
   fi
-  if [ "${rc}" -ne 0 ] || [ -z "${value}" ]; then
+  if [ "${rc}" -ne 0 ]; then
     log_cache "${id}" "failed unexpectedly (exit status ${rc}), continuing without it"
+    _main_output "${id}" "${failure}" || true
+    value="${failure}"
+  elif [ -z "${value}" ]; then
+    log_cache "${id}" "set no result, continuing without it"
     _main_output "${id}" "${failure}" || true
     value="${failure}"
   fi

@@ -41,12 +41,6 @@ pnpm-lock.yaml}")
 
 # cfg_validate: 0 valid, 1 configuration error (message printed), 2 pull request build without credentials.
 cfg_validate() {
-  if [ -n "${BITRISE_PULL_REQUEST:-}" ] && [ -z "${CFG_ACCESS_KEY_ID}" ] && [ -z "${CFG_SECRET_ACCESS_KEY}" ]; then
-    log_warn "Skipping the S3 build cache: the secrets S3_CACHE_ACCESS_KEY_ID and S3_CACHE_SECRET_ACCESS_KEY are empty in this pull request build."
-    log_warn "Bitrise does not expose secrets to pull request builds unless \"Expose for Pull Requests\" is enabled for them, so these secrets are not available to pull request builds."
-    return 2
-  fi
-
   local problems=() cache
   case "${CFG_MODE}" in
     restore | save) ;;
@@ -63,6 +57,13 @@ cfg_validate() {
       esac
     done
   fi
+  # mode and caches are checked first: an invalid value is an error even without credentials.
+  if [ "${#problems[@]}" -eq 0 ] && [ -n "${BITRISE_PULL_REQUEST:-}" ] && [ -z "${CFG_ACCESS_KEY_ID}" ] && [ -z "${CFG_SECRET_ACCESS_KEY}" ]; then
+    log_warn "Skipping the S3 build cache: the secrets S3_CACHE_ACCESS_KEY_ID and S3_CACHE_SECRET_ACCESS_KEY are empty in this pull request build."
+    log_warn "Bitrise does not expose secrets to pull request builds unless \"Expose for Pull Requests\" is enabled for them, so these secrets are not available to pull request builds."
+    return 2
+  fi
+
   [ -n "${CFG_BUCKET}" ] || problems+=("bucket (app variable S3_CACHE_BUCKET)")
   [ -n "${CFG_PREFIX}" ] || problems+=("prefix (app variable S3_CACHE_PREFIX)")
   [ -n "${CFG_ACCESS_KEY_ID}" ] || problems+=("access_key_id (secret S3_CACHE_ACCESS_KEY_ID)")
