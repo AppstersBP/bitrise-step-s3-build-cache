@@ -108,12 +108,19 @@ init_storage() {
 
 @test "storage_latest returns the newest key under the name prefix" {
   init_storage
-  STUB_AWS_LIST_OUT="cache/x/gradle-b.tar.zst" run storage_latest gradle-
+  STUB_AWS_LIST_OUT=$'2026-11-13T10:00:00+00:00\tcache/x/gradle-b.tar.zst' run storage_latest gradle-
   [ "$status" -eq 0 ]
   [ "$output" = "cache/x/gradle-b.tar.zst" ]
   assert_called "s3api list-objects-v2 --bucket b --prefix cache/x/gradle-"
-  assert_called 'sort_by(Contents || `[]`, &LastModified)[-1].Key'
+  assert_called 'Contents[].[LastModified,Key]'
   assert_called "--output text"
+}
+
+@test "storage_latest picks the newest key across several result pages" {
+  init_storage
+  STUB_AWS_LIST_OUT=$'2026-11-10T08:00:00+00:00\tcache/x/gradle-old\nNone\n2026-11-13T09:30:00+00:00\tcache/x/gradle-new\n2026-11-12T23:59:59+00:00\tcache/x/gradle-mid' run storage_latest gradle-
+  [ "$status" -eq 0 ]
+  [ "$output" = "cache/x/gradle-new" ]
 }
 
 @test "storage_latest returns empty for None and 1 when listing fails" {
@@ -134,10 +141,10 @@ init_storage() {
   assert_called "s3api copy-object --bucket b --key cache/x/k --copy-source b/cache/x/k --metadata-directive REPLACE"
 }
 
-@test "storage_touch URL-encodes unusual characters in the copy source" {
+@test "storage_touch passes the copy source unencoded (the AWS CLI encodes it)" {
   init_storage
   storage_touch "cache/x/a b+c"
-  assert_called "--key cache/x/a b+c --copy-source b/cache/x/a%20b%2Bc "
+  assert_called "--key cache/x/a b+c --copy-source b/cache/x/a b+c --metadata-directive"
 }
 
 @test "storage_touch reports failure" {

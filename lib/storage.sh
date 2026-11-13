@@ -72,46 +72,26 @@ storage_put() {
     s3 cp --only-show-errors "$1" "s3://${CFG_BUCKET}/$2"
 }
 
-# storage_urlencode_path TEXT: percent-encode everything except A-Za-z0-9._-/ (byte-wise).
-storage_urlencode_path() {
-  local LC_ALL=C text="$1" out="" i ch
-  case "${text}" in
-    *[!A-Za-z0-9._/-]*) ;;
-    *)
-      printf '%s' "${text}"
-      return 0
-      ;;
-  esac
-  for ((i = 0; i < ${#text}; i++)); do
-    ch="${text:i:1}"
-    case "${ch}" in
-      [A-Za-z0-9._/-]) out+="${ch}" ;;
-      *) out+="$(printf '%%%02X' "'${ch}")" ;;
-    esac
-  done
-  printf '%s' "${out}"
-}
-
 # storage_touch KEY: refresh LastModified by copying the object onto itself.
+# The AWS CLI percent-encodes the copy source itself, so the key is passed as is.
 storage_touch() {
-  local source
-  source="${CFG_BUCKET}/$(storage_urlencode_path "$1")"
   aws ${STORAGE_ARGS[@]+"${STORAGE_ARGS[@]}"} --cli-connect-timeout "${CFG_CONNECT_TIMEOUT}" \
-    s3api copy-object --bucket "${CFG_BUCKET}" --key "$1" --copy-source "${source}" \
+    s3api copy-object --bucket "${CFG_BUCKET}" --key "$1" --copy-source "${CFG_BUCKET}/$1" \
     --metadata-directive REPLACE >/dev/null
 }
 
 # storage_latest NAME_PREFIX: print the most recently modified key under <prefix>/NAME_PREFIX,
 # nothing if there is none. Returns 1 only if the listing itself fails.
+# The query is applied per result page, so the newest object is selected here, not in the query.
 storage_latest() {
-  # shellcheck disable=SC2016 # JMESPath backticks are literal
-  local result query='sort_by(Contents || `[]`, &LastModified)[-1].Key'
-  result="$(aws ${STORAGE_ARGS[@]+"${STORAGE_ARGS[@]}"} --cli-connect-timeout "${CFG_CONNECT_TIMEOUT}" \
+  local listing tab
+  tab="$(printf '\t')"
+  # shellcheck disable=SC2016 # JMESPath query, nothing to expand
+  listing="$(aws ${STORAGE_ARGS[@]+"${STORAGE_ARGS[@]}"} --cli-connect-timeout "${CFG_CONNECT_TIMEOUT}" \
     s3api list-objects-v2 --bucket "${CFG_BUCKET}" --prefix "${CFG_PREFIX}/$1" \
-    --query "${query}" --output text)" || return 1
-  case "${result}" in
-    "" | None) ;;
-    *) printf '%s\n' "${result}" ;;
-  esac
+    --query 'Contents[].[LastModified,Key]' --output text)" || return 1
+  # Lines are "<ISO-8601 LastModified><TAB><Key>"; "None" marks a page without objects.
+  printf '%s\n' "${listing}" | awk -F "${tab}" 'NF >= 2 && $1 != "None"' |
+    LC_ALL=C sort -t "${tab}" -k1,1 | tail -n 1 | cut -f2-
   return 0
 }
