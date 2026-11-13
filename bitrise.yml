@@ -110,6 +110,178 @@ workflows:
             if [ -n "${S3_TEST_DIR}" ]; then rm -rf "${S3_TEST_DIR}"; fi
             exit "${rc}"
 
+  # End-to-end tests: build the sample app in e2e/sample-app twice with the step around each
+  # build and check that the second round used the caches. They run on GitHub Actions, in
+  # e2e/docker (Android) and on Bitrise. The caches live in the real home directory, so the
+  # workflows refuse to run unless CI=true (see e2e/scripts/clean-local.sh).
+  e2e-android:
+    summary: Android end-to-end test against a MinIO started for the run.
+    envs:
+    - E2E_PLATFORM: android
+    - E2E_CACHES: |-
+        gradle-deps
+        gradle-build-cache
+        ccache
+    before_run:
+    - _e2e-start-minio
+    after_run:
+    - _e2e-rounds
+
+  e2e-ios:
+    summary: iOS end-to-end test (CocoaPods) against a MinIO started for the run.
+    envs:
+    - E2E_PLATFORM: ios
+    - E2E_CACHES: cocoapods
+    before_run:
+    - _e2e-start-minio
+    after_run:
+    - _e2e-rounds
+
+  e2e-external-bucket:
+    summary: Android end-to-end test against the bucket in the S3_CACHE_* secrets; skipped without them.
+    envs:
+    - E2E_PLATFORM: android
+    - E2E_CACHES: |-
+        gradle-deps
+        gradle-build-cache
+        ccache
+    steps:
+    - git::https://github.com/bitrise-steplib/steps-script.git@master:
+        title: Use the external bucket
+        inputs:
+        - content: |-
+            #!/usr/bin/env bash
+            set -euo pipefail
+            if [ -z "${S3_CACHE_BUCKET:-}" ] || [ -z "${S3_CACHE_ACCESS_KEY_ID:-}" ] || [ -z "${S3_CACHE_SECRET_ACCESS_KEY:-}" ]; then
+              echo "skipped: no S3_CACHE_* secrets (S3_CACHE_BUCKET, S3_CACHE_ACCESS_KEY_ID, S3_CACHE_SECRET_ACCESS_KEY)"
+              envman add --key E2E_SKIP --value true
+              exit 0
+            fi
+            e2e/scripts/clean-local.sh --check
+            prefix="${S3_CACHE_PREFIX:+${S3_CACHE_PREFIX%/}/}e2e/${BITRISE_BUILD_NUMBER:-local}-${RANDOM}"
+            envman add --key S3_CACHE_PREFIX --value "${prefix}"
+            envman add --key E2E_LOG_DIR --value "${E2E_LOG_DIR:-${BITRISE_DEPLOY_DIR}/e2e-logs}"
+            echo "bucket ${S3_CACHE_BUCKET}, prefix ${prefix}, endpoint ${S3_CACHE_ENDPOINT:-AWS S3}"
+    after_run:
+    - _e2e-rounds
+
+  _e2e-start-minio:
+    summary: Checks that the machine may be wiped, starts MinIO and selects a unique prefix.
+    steps:
+    - git::https://github.com/bitrise-steplib/steps-script.git@master:
+        title: Start MinIO
+        inputs:
+        - content: |-
+            #!/usr/bin/env bash
+            set -euo pipefail
+            e2e/scripts/clean-local.sh --check
+            minio_env="$(e2e/scripts/start-minio.sh)"
+            eval "${minio_env}"
+            envman add --key S3_CACHE_ENDPOINT --value "${S3_CACHE_ENDPOINT}"
+            envman add --key S3_CACHE_BUCKET --value "${S3_CACHE_BUCKET}"
+            envman add --key S3_CACHE_ACCESS_KEY_ID --value "${S3_CACHE_ACCESS_KEY_ID}"
+            envman add --key S3_CACHE_SECRET_ACCESS_KEY --value "${S3_CACHE_SECRET_ACCESS_KEY}"
+            envman add --key S3_CACHE_REGION --value "us-east-1"
+            envman add --key S3_CACHE_PREFIX --value "e2e/${BITRISE_BUILD_NUMBER:-local}-${RANDOM}"
+            envman add --key E2E_LOG_DIR --value "${E2E_LOG_DIR:-${BITRISE_DEPLOY_DIR}/e2e-logs}"
+
+  # Round 1: restore, build, save. Then clean-local.sh. Round 2: restore, build, save, check.
+  # Uses E2E_PLATFORM (android or ios) and E2E_CACHES; does nothing when E2E_SKIP is true.
+  _e2e-rounds:
+    steps:
+    - path::./:
+        title: Restore the caches (round 1)
+        run_if: '{{not (enveq "E2E_SKIP" "true")}}'
+        inputs:
+        - mode: restore
+        - caches: $E2E_CACHES
+        - gradle_key_files: |-
+            e2e/sample-app/android/gradle.properties
+            e2e/sample-app/android/build.gradle
+            e2e/sample-app/android/app/build.gradle
+            e2e/sample-app/package-lock.json
+        - cocoapods_lockfile: e2e/sample-app/ios/Podfile.lock
+        - cocoapods_dir: e2e/sample-app/ios/Pods
+    - git::https://github.com/bitrise-steplib/steps-script.git@master:
+        title: Build the sample app (round 1)
+        run_if: '{{not (enveq "E2E_SKIP" "true")}}'
+        inputs:
+        - content: |-
+            #!/usr/bin/env bash
+            set -euo pipefail
+            "e2e/scripts/build-${E2E_PLATFORM}.sh" 1
+    - path::./:
+        title: Save the caches (round 1)
+        run_if: '{{not (enveq "E2E_SKIP" "true")}}'
+        inputs:
+        - mode: save
+        - caches: $E2E_CACHES
+        - gradle_key_files: |-
+            e2e/sample-app/android/gradle.properties
+            e2e/sample-app/android/build.gradle
+            e2e/sample-app/android/app/build.gradle
+            e2e/sample-app/package-lock.json
+        - cocoapods_lockfile: e2e/sample-app/ios/Podfile.lock
+        - cocoapods_dir: e2e/sample-app/ios/Pods
+    - git::https://github.com/bitrise-steplib/steps-script.git@master:
+        title: Remove the local caches and build outputs
+        run_if: '{{not (enveq "E2E_SKIP" "true")}}'
+        inputs:
+        - content: |-
+            #!/usr/bin/env bash
+            set -euo pipefail
+            e2e/scripts/clean-local.sh
+    - path::./:
+        title: Restore the caches (round 2)
+        run_if: '{{not (enveq "E2E_SKIP" "true")}}'
+        inputs:
+        - mode: restore
+        - caches: $E2E_CACHES
+        - gradle_key_files: |-
+            e2e/sample-app/android/gradle.properties
+            e2e/sample-app/android/build.gradle
+            e2e/sample-app/android/app/build.gradle
+            e2e/sample-app/package-lock.json
+        - cocoapods_lockfile: e2e/sample-app/ios/Podfile.lock
+        - cocoapods_dir: e2e/sample-app/ios/Pods
+    - git::https://github.com/bitrise-steplib/steps-script.git@master:
+        title: Build the sample app (round 2)
+        run_if: '{{not (enveq "E2E_SKIP" "true")}}'
+        inputs:
+        - content: |-
+            #!/usr/bin/env bash
+            set -euo pipefail
+            "e2e/scripts/build-${E2E_PLATFORM}.sh" 2
+    - path::./:
+        title: Save the caches (round 2)
+        run_if: '{{not (enveq "E2E_SKIP" "true")}}'
+        inputs:
+        - mode: save
+        - caches: $E2E_CACHES
+        - gradle_key_files: |-
+            e2e/sample-app/android/gradle.properties
+            e2e/sample-app/android/build.gradle
+            e2e/sample-app/android/app/build.gradle
+            e2e/sample-app/package-lock.json
+        - cocoapods_lockfile: e2e/sample-app/ios/Podfile.lock
+        - cocoapods_dir: e2e/sample-app/ios/Pods
+    - git::https://github.com/bitrise-steplib/steps-script.git@master:
+        title: Check round 2
+        run_if: '{{not (enveq "E2E_SKIP" "true")}}'
+        inputs:
+        - content: |-
+            #!/usr/bin/env bash
+            set -euo pipefail
+            e2e/scripts/assert-round2.sh "${E2E_PLATFORM}"
+    - git::https://github.com/bitrise-steplib/steps-script.git@master:
+        title: Stop MinIO
+        is_always_run: true
+        inputs:
+        - content: |-
+            #!/usr/bin/env bash
+            set -uo pipefail
+            e2e/scripts/stop-minio.sh
+
   audit-this-step:
     steps:
     - git::https://github.com/bitrise-steplib/steps-script.git@master:

@@ -2,6 +2,9 @@
 # Starts a MinIO server for tests and prints nothing but `export` lines on stdout:
 #   eval "$(e2e/scripts/start-minio.sh)"
 # Prefers Docker; falls back to the MinIO binary. Everything else goes to stderr.
+# With S3_CACHE_MINIO_ENDPOINT set (for example http://minio:9000), it starts nothing and uses
+# the MinIO already running there, which must use the credentials below
+# (e2e/docker/docker-compose.yml starts one).
 # Stop it with e2e/scripts/stop-minio.sh.
 set -euo pipefail
 
@@ -36,11 +39,15 @@ free_port() {
   return 1
 }
 
-PORT="$(free_port)" || {
-  say "no free port found"
-  exit 1
-}
-ENDPOINT="http://127.0.0.1:${PORT}"
+if [ -n "${S3_CACHE_MINIO_ENDPOINT:-}" ]; then
+  ENDPOINT="${S3_CACHE_MINIO_ENDPOINT%/}"
+else
+  PORT="$(free_port)" || {
+    say "no free port found"
+    exit 1
+  }
+  ENDPOINT="http://127.0.0.1:${PORT}"
+fi
 
 start_docker() {
   local id
@@ -90,8 +97,12 @@ start_binary() {
   say "started the MinIO binary (pid $!) on port ${PORT}"
 }
 
-# S3_CACHE_MINIO_RUNTIME=binary skips Docker (used to test the fallback).
-if [ "${S3_CACHE_MINIO_RUNTIME:-}" != binary ] && command -v docker >/dev/null 2>&1 && docker info >/dev/null 2>&1; then
+# S3_CACHE_MINIO_ENDPOINT uses a running MinIO; S3_CACHE_MINIO_RUNTIME=binary skips Docker
+# (used to test the fallback).
+if [ -n "${S3_CACHE_MINIO_ENDPOINT:-}" ]; then
+  printf 'external %s\n' "${ENDPOINT}" >"${STATE_FILE}"
+  say "using the MinIO at ${ENDPOINT}"
+elif [ "${S3_CACHE_MINIO_RUNTIME:-}" != binary ] && command -v docker >/dev/null 2>&1 && docker info >/dev/null 2>&1; then
   start_docker || {
     say "Docker could not start MinIO, trying the binary"
     rm -f "${STATE_FILE}"
@@ -111,8 +122,12 @@ if [ -z "${ready:-}" ]; then
   exit 1
 fi
 
-AWS_ACCESS_KEY_ID="${ACCESS_KEY}" AWS_SECRET_ACCESS_KEY="${SECRET_KEY}" AWS_DEFAULT_REGION=us-east-1 \
-  aws --endpoint-url "${ENDPOINT}" s3api create-bucket --bucket "${BUCKET}" >/dev/null || {
+s3api() {
+  AWS_ACCESS_KEY_ID="${ACCESS_KEY}" AWS_SECRET_ACCESS_KEY="${SECRET_KEY}" AWS_DEFAULT_REGION=us-east-1 \
+    aws --endpoint-url "${ENDPOINT}" s3api "$@"
+}
+# A MinIO that was already running may have the bucket from an earlier run.
+s3api head-bucket --bucket "${BUCKET}" >/dev/null 2>&1 || s3api create-bucket --bucket "${BUCKET}" >/dev/null || {
   say "could not create the bucket ${BUCKET}"
   "$(dirname "${BASH_SOURCE[0]}")/stop-minio.sh" >&2 || true
   exit 1

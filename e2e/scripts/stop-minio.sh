@@ -18,6 +18,9 @@ case "${kind}" in
       exit 1
     fi
     ;;
+  external)
+    # Started by someone else (for example docker compose); left running.
+    ;;
   binary)
     kill "${first}" 2>/dev/null
     for _ in 1 2 3 4 5; do kill -0 "${first}" 2>/dev/null || break; sleep 1; done
