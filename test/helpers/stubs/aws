@@ -1,13 +1,38 @@
 #!/usr/bin/env bash
-# Stub for the AWS CLI. Logs "aws <args>" to $STUB_LOG, then dispatches on subcommand:
-#   s3api head-bucket    exit STUB_AWS_HEAD_BUCKET_EXIT (default 0)
+# Stub for the AWS CLI. Logs "aws <args>" to $STUB_LOG, then dispatches on the
+# service and subcommand (leading global options such as --endpoint-url X are skipped):
+#   s3api head-bucket     exit STUB_AWS_HEAD_BUCKET_EXIT (default 0)
 #   s3api list-objects-v2 stdout STUB_AWS_LIST_OUT, exit STUB_AWS_LIST_EXIT (default 0)
-#   s3api copy-object    exit STUB_AWS_COPY_EXIT (default 0)
-#   s3 cp s3://... DEST  copy STUB_AWS_GET_FILE to DEST if set, else exit STUB_AWS_GET_EXIT (default 1)
-#   s3 cp LOCAL s3://... exit STUB_AWS_PUT_EXIT (default 0)
+#   s3api copy-object     exit STUB_AWS_COPY_EXIT (default 0)
+#   s3 cp s3://... DEST   copy STUB_AWS_GET_FILE to DEST if set, else exit STUB_AWS_GET_EXIT (default 1)
+#   s3 cp LOCAL s3://...  exit STUB_AWS_PUT_EXIT (default 0)
+# Any other subcommand exits 2 with a message on stderr.
 echo "aws $*" >>"${STUB_LOG:-/dev/null}"
 
-case "${1:-} ${2:-}" in
+# Options that take no value; every other --option takes one (unless written --opt=value).
+is_flag() {
+  case "$1" in
+    --only-show-errors | --no-progress | --quiet | --no-verify-ssl | --no-sign-request | --debug | --no-paginate) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+# Split the arguments into global options (before the subcommand), then
+# service, subcommand and the remaining arguments.
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --*=*) shift ;;
+    --*)
+      if is_flag "$1"; then shift; else shift 2; fi
+      ;;
+    *) break ;;
+  esac
+done
+service="${1:-}"
+subcommand="${2:-}"
+[ $# -ge 2 ] && shift 2
+
+case "${service} ${subcommand}" in
   "s3api head-bucket")
     exit "${STUB_AWS_HEAD_BUCKET_EXIT:-0}"
     ;;
@@ -19,22 +44,22 @@ case "${1:-} ${2:-}" in
     exit "${STUB_AWS_COPY_EXIT:-0}"
     ;;
   "s3 cp")
-    src=""
-    dest=""
-    shift 2
+    positionals=()
     while [ $# -gt 0 ]; do
       case "$1" in
-        --*) # options: skip the ones that take a value
-          case "$1" in
-            --cli-connect-timeout | --endpoint-url | --region | --profile | --metadata-directive | --content-type) shift ;;
-          esac
-          ;;
-        *)
-          if [ -z "${src}" ]; then src="$1"; else dest="$1"; fi
-          ;;
+        --*=*) ;;
+        --*) is_flag "$1" || shift ;;
+        *) positionals+=("$1") ;;
       esac
       shift
     done
+    count=${#positionals[@]}
+    if [ "${count}" -lt 2 ]; then
+      echo "aws stub: s3 cp needs a source and a destination" >&2
+      exit 2
+    fi
+    src="${positionals[count - 2]}"
+    dest="${positionals[count - 1]}"
     case "${src}" in
       s3://*)
         if [ -n "${STUB_AWS_GET_FILE:-}" ]; then
@@ -49,4 +74,5 @@ case "${1:-} ${2:-}" in
     esac
     ;;
 esac
-exit 0
+echo "aws stub: unsupported command: ${service} ${subcommand}" >&2
+exit 2
