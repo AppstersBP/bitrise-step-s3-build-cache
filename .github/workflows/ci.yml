@@ -16,14 +16,14 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y shellcheck bats
-      - name: Install the Bitrise CLI
+      - name: Install the Bitrise CLI and stepman
         run: |
           mkdir -p "$HOME/.local/bin"
-          gh release download -R bitrise-io/bitrise --pattern 'bitrise-Linux-x86_64' -O "$HOME/.local/bin/bitrise"
-          chmod +x "$HOME/.local/bin/bitrise"
+          base=https://github.com/bitrise-io
+          curl -fsSL -o "$HOME/.local/bin/bitrise" "$base/bitrise/releases/latest/download/bitrise-Linux-x86_64"
+          curl -fsSL -o "$HOME/.local/bin/stepman" "$base/stepman/releases/latest/download/stepman-Linux-x86_64"
+          chmod +x "$HOME/.local/bin/bitrise" "$HOME/.local/bin/stepman"
           echo "$HOME/.local/bin" >> "$GITHUB_PATH"
-        env:
-          GH_TOKEN: ${{ github.token }}
       - name: shellcheck
         run: shellcheck step.sh lib/*.sh test/helpers/stubs/*
       - name: Audit the step
