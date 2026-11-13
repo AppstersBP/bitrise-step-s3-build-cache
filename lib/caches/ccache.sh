@@ -4,24 +4,9 @@
 
 CCACHE_ID="ccache"
 
-# _ccache_branch: print the sanitised current branch ("unknown" if unset).
-_ccache_branch() {
-  local branch="${BITRISE_GIT_BRANCH:-}"
-  if [ -z "${branch}" ]; then
-    log_warn "BITRISE_GIT_BRANCH is empty, using the branch name \"unknown\""
-    branch="unknown"
-  fi
-  key_branch "${branch}"
-}
-
 # _ccache_object BRANCH: print the object key for a sanitised branch.
 _ccache_object() {
   storage_object "ccache-$1.tar.zst"
-}
-
-# _ccache_size FILE: size in bytes.
-_ccache_size() {
-  wc -c <"$1" | tr -d ' '
 }
 
 # _ccache_platform: Linux or Darwin (uname -s, overridable with S3_CACHE_PLATFORM).
@@ -77,70 +62,6 @@ _ccache_configure() {
     env_export CCACHE_COMPILERCHECK content
 }
 
-# _ccache_fetch KEY: download KEY and extract it into $HOME.
-# Returns 0 restored, 1 downloaded but not extracted, 2 not downloaded.
-_ccache_fetch() {
-  local key="$1" tmp rc=0
-  tmp="$(mktemp "${TMPDIR:-/tmp}/s3-build-cache-ccache.XXXXXX")" || {
-    log_cache "${CCACHE_ID}" "cannot create a temporary file"
-    return 1
-  }
-  if ! storage_get "${key}" "${tmp}"; then
-    rm -f "${tmp}"
-    return 2
-  fi
-  if archive_extract "${tmp}" "${HOME}"; then
-    log_cache "${CCACHE_ID}" "restored ${key} ($(_ccache_size "${tmp}") bytes)"
-  else
-    log_cache "${CCACHE_ID}" "archive ${key} is damaged or could not be extracted"
-    rc=1
-  fi
-  rm -f "${tmp}"
-  return "${rc}"
-}
-
-# _ccache_restore_archive: branch, fallback branch, newest; sets the result.
-_ccache_restore_archive() {
-  local branch fallback object candidates=() key latest result
-
-  branch="$(_ccache_branch)"
-  object="$(_ccache_object "${branch}")"
-  candidates+=("exact:${object}")
-  if [ -n "${CFG_FALLBACK_BRANCH:-}" ]; then
-    fallback="$(key_branch "${CFG_FALLBACK_BRANCH}")"
-    if [ "${fallback}" != "${branch}" ]; then
-      candidates+=("fallback:$(_ccache_object "${fallback}")")
-    fi
-  fi
-
-  for key in "${candidates[@]}"; do
-    result="${key%%:*}"
-    key="${key#*:}"
-    if _ccache_fetch "${key}"; then
-      out_result "${CCACHE_ID}" "${result}"
-      return 0
-    fi
-  done
-
-  if ! latest="$(storage_latest "ccache-")"; then
-    log_cache "${CCACHE_ID}" "could not list stored archives, nothing restored"
-    out_result "${CCACHE_ID}" none
-    return 0
-  fi
-  if [ -z "${latest}" ]; then
-    log_cache "${CCACHE_ID}" "no cache found (looked for ${object})"
-    out_result "${CCACHE_ID}" none
-    return 0
-  fi
-  if _ccache_fetch "${latest}"; then
-    out_result "${CCACHE_ID}" fallback
-  else
-    log_cache "${CCACHE_ID}" "fallback ${latest} could not be restored"
-    out_result "${CCACHE_ID}" none
-  fi
-  return 0
-}
-
 cache_ccache_restore() {
   if ! command -v ccache >/dev/null 2>&1 && ! _ccache_install; then
     out_result "${CCACHE_ID}" skipped
@@ -148,7 +69,7 @@ cache_ccache_restore() {
   fi
   _ccache_configure || log_cache "${CCACHE_ID}" "could not export the ccache variables"
 
-  _ccache_restore_archive
+  cache_restore_chain "${CCACHE_ID}" "ccache-" "${HOME}"
 
   ccache "--max-size=${CFG_CCACHE_MAX_SIZE}" >&2 ||
     log_cache "${CCACHE_ID}" "ccache --max-size=${CFG_CCACHE_MAX_SIZE} failed"
@@ -170,7 +91,7 @@ cache_ccache_save() {
     out_save "${CCACHE_ID}" skipped
     return 0
   fi
-  branch="$(_ccache_branch)"
+  branch="$(cache_branch)"
   object="$(_ccache_object "${branch}")"
 
   tmp="$(mktemp "${TMPDIR:-/tmp}/s3-build-cache-ccache.XXXXXX")" || {
@@ -182,7 +103,7 @@ cache_ccache_save() {
     log_cache "${CCACHE_ID}" "could not create the archive"
     out_save "${CCACHE_ID}" failed
   elif storage_put "${tmp}" "${object}"; then
-    log_cache "${CCACHE_ID}" "uploaded ${object} ($(_ccache_size "${tmp}") bytes)"
+    log_cache "${CCACHE_ID}" "uploaded ${object} ($(cache_archive_size "${tmp}") bytes)"
     out_save "${CCACHE_ID}" uploaded
   else
     log_cache "${CCACHE_ID}" "upload of ${object} failed"

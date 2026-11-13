@@ -18,32 +18,6 @@ _gradle_deps_object() {
   storage_object "gradle-${hash}.tar.zst"
 }
 
-# _gradle_deps_size FILE: size in bytes.
-_gradle_deps_size() {
-  wc -c <"$1" | tr -d ' '
-}
-
-# _gradle_deps_fetch KEY: download KEY and extract it into $HOME. Logs the reason on failure.
-_gradle_deps_fetch() {
-  local key="$1" tmp rc=0
-  tmp="$(mktemp "${TMPDIR:-/tmp}/s3-build-cache-gradle.XXXXXX")" || {
-    log_cache "${GRADLE_DEPS_ID}" "cannot create a temporary file"
-    return 1
-  }
-  if ! storage_get "${key}" "${tmp}"; then
-    rm -f "${tmp}"
-    return 2
-  fi
-  if archive_extract "${tmp}" "${HOME}"; then
-    log_cache "${GRADLE_DEPS_ID}" "restored ${key} ($(_gradle_deps_size "${tmp}") bytes)"
-  else
-    log_cache "${GRADLE_DEPS_ID}" "archive ${key} is damaged or could not be extracted"
-    rc=1
-  fi
-  rm -f "${tmp}"
-  return "${rc}"
-}
-
 cache_gradle_deps_restore() {
   local object latest rc
   if ! object="$(_gradle_deps_object)"; then
@@ -52,7 +26,7 @@ cache_gradle_deps_restore() {
     return 0
   fi
 
-  _gradle_deps_fetch "${object}" && rc=0 || rc=$?
+  cache_fetch "${GRADLE_DEPS_ID}" "${object}" "${HOME}" && rc=0 || rc=$?
   if [ "${rc}" -eq 0 ]; then
     state_set GRADLE_DEPS_EXACT_KEY "${object}"
     out_result "${GRADLE_DEPS_ID}" exact
@@ -73,7 +47,7 @@ cache_gradle_deps_restore() {
     out_result "${GRADLE_DEPS_ID}" none
     return 0
   fi
-  if _gradle_deps_fetch "${latest}"; then
+  if cache_fetch "${GRADLE_DEPS_ID}" "${latest}" "${HOME}"; then
     out_result "${GRADLE_DEPS_ID}" fallback
   else
     log_cache "${GRADLE_DEPS_ID}" "fallback ${latest} could not be restored"
@@ -118,7 +92,7 @@ cache_gradle_deps_save() {
     log_cache "${GRADLE_DEPS_ID}" "could not create the archive"
     out_save "${GRADLE_DEPS_ID}" failed
   elif storage_put "${tmp}" "${object}"; then
-    log_cache "${GRADLE_DEPS_ID}" "uploaded ${object} ($(_gradle_deps_size "${tmp}") bytes)"
+    log_cache "${GRADLE_DEPS_ID}" "uploaded ${object} ($(cache_archive_size "${tmp}") bytes)"
     out_save "${GRADLE_DEPS_ID}" uploaded
   else
     log_cache "${GRADLE_DEPS_ID}" "upload of ${object} failed"
