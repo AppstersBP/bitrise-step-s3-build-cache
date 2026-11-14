@@ -142,3 +142,42 @@ AWS S3: add a lifecycle configuration to the bucket (Management, Lifecycle rules
 Cloudflare R2: open the bucket, then Settings, Object lifecycle rules, add a rule with the prefix `<prefix>/` and the action "Delete uploaded objects" after N days.
 
 A value of 30 days is a reasonable start for a project that builds every few days.
+
+## Testing
+
+| What | Command | Needs |
+|---|---|---|
+| Lint | `shellcheck step.sh lib/*.sh lib/caches/*.sh e2e/scripts/*.sh test/helpers/stubs/*` | shellcheck |
+| Unit tests | `bats test/unit` | bats-core |
+| Integration tests against MinIO | `bats test/integration` | bats-core, AWS CLI v2, zstd, Docker or internet access for the MinIO binary |
+| The step through the Bitrise CLI | `bitrise run test` | Bitrise CLI, AWS CLI v2, zstd |
+| End-to-end, Android | `bitrise run e2e-android` (CI machines only, see below) | Android SDK and NDK, JDK 17, Node.js 22 |
+| End-to-end, iOS | `bitrise run e2e-ios` (CI machines only) | Xcode, CocoaPods, Node.js 22 |
+
+GitHub Actions runs all of them on every push.
+
+### End-to-end tests
+
+The end-to-end workflows in `bitrise.yml` build the sample app in `e2e/sample-app` twice: restore, build, save, then `e2e/scripts/clean-local.sh` removes the local caches and build outputs, then restore, build, save again. `e2e/scripts/assert-round2.sh` then checks the second round:
+
+- Android (`e2e-android`, caches `gradle-deps`, `gradle-build-cache`, `ccache`): Gradle dependencies restored by exact key and their date renewed on save, Gradle tasks reported `from cache` (the build command does not pass `--build-cache`; the step enables the build cache in `~/.gradle/gradle.properties`), and a ccache hit rate of at least `E2E_MIN_CCACHE_HIT_PERCENT`.
+- iOS (`e2e-ios`, cache `cocoapods`): CocoaPods restored by exact key and its date renewed on save.
+
+Each run starts its own MinIO (`e2e/scripts/start-minio.sh`) and uses a new prefix. `e2e-external-bucket` runs the Android test against the bucket given by the `S3_CACHE_*` variables and secrets instead, and does nothing when they are not set.
+
+The caches live in the home directory of the machine, so these workflows delete `~/.gradle` (keeping the machine's own `gradle.properties` and init scripts) and `~/.ccache`. They refuse to run unless `CI=true` (set by Bitrise and GitHub Actions) or `S3_CACHE_E2E_ALLOW_LOCAL_WIPE=true`. On a developer machine, use the Docker setup below.
+
+### Android end-to-end test in Docker
+
+`e2e/docker/docker-compose.yml` runs MinIO and a build container from `bitriseio/ubuntu-noble-24.04-bitrise-2025-android`, the image of Bitrise's Ubuntu 24.04 Android stack, which Bitrise publishes on Docker Hub (pinned by digest). The container copies the checkout (without `node_modules` and build outputs), sets `CI=true` and runs the workflow in its own home directory:
+
+```sh
+docker compose -f e2e/docker/docker-compose.yml run --rm builder bitrise run e2e-android
+docker compose -f e2e/docker/docker-compose.yml down
+```
+
+The image is about 15 GB to download and 37 GB unpacked; the first pull takes a while. It contains the Android SDK with NDK 27, JDK 17, Node.js, the AWS CLI, zstd and the Bitrise CLI; ccache is installed by the step and CMake by the Android Gradle plugin.
+
+### Sample app
+
+Created with `npx create-expo-app@5.0.0 e2e/sample-app --template blank-typescript` (Expo SDK 58, React Native 0.88, new architecture), native projects generated with `npx expo prebuild --clean` and committed. Android builds only `x86_64` (`reactNativeArchitectures` in `android/gradle.properties`) to keep the builds short. The step's `gradle_key_files` input in the end-to-end workflows lists the sample app's `gradle.properties`, `build.gradle`, `app/build.gradle` and `package-lock.json`.

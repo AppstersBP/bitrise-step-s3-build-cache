@@ -1,0 +1,27 @@
+# Android end-to-end test on a developer machine: MinIO plus a build container from the image
+# of Bitrise's Ubuntu 24.04 Android stack. The build container works on a copy of this
+# checkout in its own home directory, so the developer's ~/.gradle is never touched.
+#
+#   docker compose -f e2e/docker/docker-compose.yml run --rm builder bitrise run e2e-android
+#   docker compose -f e2e/docker/docker-compose.yml down
+services:
+  minio:
+    # The same image and credentials as e2e/scripts/start-minio.sh.
+    image: pgsty/minio:RELEASE.2026-08-04T00-00-00Z@sha256:b6bfe7239bfc83fb90d31612d9704d86039dd714f7904b3f1ad68f211e602372
+    command: ["server", "/data"]
+    environment:
+      MINIO_ROOT_USER: s3cache-test-user
+      MINIO_ROOT_PASSWORD: s3cache-test-secret
+
+  builder:
+    image: bitriseio/ubuntu-noble-24.04-bitrise-2025-android:v2026-11-13-b6949@sha256:d4a69a28428a44f6108434fdcead4830ed096199f399ffb3a96672e325fe90db
+    depends_on:
+      - minio
+    environment:
+      # The end-to-end workflows only run where CI=true; this container is disposable.
+      CI: "true"
+      S3_CACHE_MINIO_ENDPOINT: http://minio:9000
+    volumes:
+      - ../..:/checkout:ro
+    entrypoint: ["/checkout/e2e/docker/entrypoint.sh"]
+    command: ["bitrise", "run", "e2e-android"]
