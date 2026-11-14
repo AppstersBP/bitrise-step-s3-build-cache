@@ -20,6 +20,8 @@ services:
     environment:
       # The end-to-end workflows only run where CI=true; this container is disposable.
       CI: "true"
+      # entrypoint.sh deletes and refills BITRISE_SOURCE_DIR only where this is set.
+      S3_CACHE_E2E_CONTAINER: "true"
       S3_CACHE_MINIO_ENDPOINT: http://minio:9000
     volumes:
       - ../..:/checkout:ro

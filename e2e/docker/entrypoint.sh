@@ -7,6 +7,19 @@
 set -euo pipefail
 
 work="${BITRISE_SOURCE_DIR:-/bitrise/src}"
+
+# The working directory is deleted below. Refuse unless this is the container of
+# docker-compose.yml (marker variable set there, /.dockerenv present, checkout mounted).
+if [ "${S3_CACHE_E2E_CONTAINER:-}" != true ] || [ ! -f /.dockerenv ] || [ ! -d /checkout ]; then
+  echo "[entrypoint] refusing to run outside the container of e2e/docker/docker-compose.yml" >&2
+  exit 1
+fi
+case "${work}" in
+  "" | / | /checkout | /checkout/*)
+    echo "[entrypoint] refusing to use '${work}' as the working directory" >&2
+    exit 1
+    ;;
+esac
 rm -rf "${work}"
 mkdir -p "${work}"
 tar -C /checkout \
