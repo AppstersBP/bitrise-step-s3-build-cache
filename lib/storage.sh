@@ -69,10 +69,21 @@ storage_object() {
   printf '%s/%s\n' "${CFG_PREFIX}" "$1"
 }
 
-# storage_get KEY DEST_FILE: download an object. 1 if it is missing or the download fails.
+# storage_get KEY DEST_FILE: download an object. Returns 0 downloaded, 3 the object does not
+# exist (expected on a cache miss; nothing is printed), 1 any other failure (a warning with the
+# AWS CLI's error text is printed).
 storage_get() {
-  aws ${STORAGE_ARGS[@]+"${STORAGE_ARGS[@]}"} --cli-connect-timeout "${CFG_CONNECT_TIMEOUT}" \
-    s3 cp --only-show-errors "s3://${CFG_BUCKET}/$1" "$2"
+  local err rc=0
+  err="$(aws ${STORAGE_ARGS[@]+"${STORAGE_ARGS[@]}"} --cli-connect-timeout "${CFG_CONNECT_TIMEOUT}" \
+    s3 cp --only-show-errors "s3://${CFG_BUCKET}/$1" "$2" 2>&1 >/dev/null)" || rc=$?
+  [ "${rc}" -eq 0 ] && return 0
+  if printf '%s' "${err}" | grep -qE '\(404\)|NoSuchKey|Not Found|does not exist'; then
+    return 3
+  fi
+  # The last non-empty line holds the error ("fatal error: An error occurred (403) ...").
+  err="$(printf '%s\n' "${err}" | awk 'NF { line = $0 } END { sub(/^[ \t]+/, "", line); print line }')"
+  log_warn "download of $1 failed: ${err:-exit status ${rc}}"
+  return 1
 }
 
 # storage_put SRC_FILE KEY: upload a file.

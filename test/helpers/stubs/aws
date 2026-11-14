@@ -4,7 +4,9 @@
 #   s3api head-bucket     exit STUB_AWS_HEAD_BUCKET_EXIT (default 0)
 #   s3api list-objects-v2 stdout STUB_AWS_LIST_OUT, exit STUB_AWS_LIST_EXIT (default 0)
 #   s3api copy-object     exit STUB_AWS_COPY_EXIT (default 0)
-#   s3 cp s3://... DEST   copy STUB_AWS_GET_FILE to DEST if set, else exit STUB_AWS_GET_EXIT (default 1)
+#   s3 cp s3://... DEST   copy STUB_AWS_GET_FILE to DEST if set, else print STUB_AWS_GET_ERR
+#                         (unset: the CLI's 404 message) on stderr and exit STUB_AWS_GET_EXIT
+#                         (default 1)
 #   s3 cp LOCAL s3://...  exit STUB_AWS_PUT_EXIT (default 0)
 # Any other subcommand exits 2 with a message on stderr.
 echo "aws $*" >>"${STUB_LOG:-/dev/null}"
@@ -66,6 +68,7 @@ case "${service} ${subcommand}" in
           cp "${STUB_AWS_GET_FILE}" "${dest}"
           exit $?
         fi
+        printf '%s\n' "${STUB_AWS_GET_ERR-fatal error: An error occurred (404) when calling the HeadObject operation: Key \"${src#s3://*/}\" does not exist}" >&2
         exit "${STUB_AWS_GET_EXIT:-1}"
         ;;
       *)

@@ -108,6 +108,9 @@ dir_checksum() {
   run_step
   [ "${status}" -eq 0 ]
   assert_called "--key S3_CACHE_RESULT_GRADLE_DEPS --value none"
+  # A miss is expected and must not show the AWS CLI's 404 error.
+  [[ "${output}" != *"fatal error"* ]]
+  [[ "${output}" == *"no cache found"* ]]
 
   # An archive of another build under the same prefix is used as a fallback.
   mkdir -p "${TEST_TMP}/other/.gradle/caches"

@@ -17,7 +17,8 @@ cache_archive_size() {
 }
 
 # cache_fetch CACHE_ID KEY BASE_DIR: download KEY and extract it into BASE_DIR.
-# Returns 0 restored, 1 downloaded but not extracted, 2 not downloaded.
+# Returns 0 restored, 1 downloaded but not extracted, 2 not downloaded (a missing object is
+# silent; storage_get has already printed a warning for any other download failure).
 cache_fetch() {
   local id="$1" key="$2" base="$3" tmp rc=0
   tmp="$(mktemp "${TMPDIR:-/tmp}/s3-build-cache-fetch.XXXXXX")" || {

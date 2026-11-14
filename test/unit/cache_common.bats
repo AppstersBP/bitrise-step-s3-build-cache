@@ -68,6 +68,27 @@ stub_storage_get() {
   [ "$status" -eq 2 ]
 }
 
+@test "cache_fetch returns 2 silently for a missing object" {
+  run cache_fetch t cache/x/a.tar.zst "${DEST}"
+  [ "$status" -eq 2 ]
+  [ -z "$output" ]
+}
+
+@test "cache_fetch returns 2 and reports a failed download" {
+  STUB_AWS_GET_ERR="fatal error: An error occurred (403) when calling the HeadObject operation: Forbidden" \
+    run cache_fetch t cache/x/a.tar.zst "${DEST}"
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"download of cache/x/a.tar.zst failed: fatal error: An error occurred (403)"* ]]
+}
+
+@test "cache_restore_chain prints no AWS error when nothing is stored" {
+  run cache_restore_chain t ccache- "${DEST}"
+  [ "$status" -eq 0 ]
+  [[ "$output" != *"fatal error"* ]]
+  [[ "$output" != *"(404)"* ]]
+  [[ "$output" == *"no cache found"* ]]
+}
+
 @test "cache_fetch removes its temporary file" {
   export TMPDIR="${TEST_TMP}/tmp"
   mkdir -p "${TMPDIR}"

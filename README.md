@@ -79,6 +79,7 @@ Every line the step prints starts with `[s3-build-cache]` or, for a cache, `[s3-
 | `cannot create a temporary file` | No space or permission for the temporary archive. |
 | `restored <key> (<n> bytes)` | An archive was downloaded and extracted. |
 | `archive <key> is damaged or could not be extracted` | The download was not usable; the next candidate is tried. |
+| `download of <key> failed: <AWS CLI error>` | The download failed for a reason other than a missing object (for example `(403)` access denied, a network or server error); the next candidate is tried. A missing object is expected on a cache miss and prints nothing of its own. |
 | `no cache found (looked for <key>)` | There is no cache for this key or branch and nothing to fall back to. |
 | `no cache found (newest archive <key> was already tried)` | The newest stored archive was one that had already failed. |
 | `could not list stored archives, nothing restored` | The listing of the prefix failed. |

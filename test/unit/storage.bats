@@ -96,14 +96,49 @@ init_storage() {
   [ "$(storage_object gradle-a.tar.zst)" = "cache/x/gradle-a.tar.zst" ]
 }
 
-@test "storage_get fails when the object is missing and succeeds when present" {
+@test "storage_get returns 3 when the object is missing and succeeds when present" {
   init_storage
   run storage_get cache/x/k "${TEST_TMP}/out"
-  [ "$status" -ne 0 ]
+  [ "$status" -eq 3 ]
   printf 'data' >"${TEST_TMP}/payload"
   STUB_AWS_GET_FILE="${TEST_TMP}/payload" run storage_get cache/x/k "${TEST_TMP}/out"
   [ "$status" -eq 0 ]
   [ "$(cat "${TEST_TMP}/out")" = "data" ]
+}
+
+@test "storage_get prints nothing for a missing object" {
+  init_storage 2>/dev/null
+  run storage_get cache/x/k "${TEST_TMP}/out"
+  [ "$status" -eq 3 ]
+  [ -z "$output" ]
+}
+
+@test "storage_get treats NoSuchKey and Not Found as missing" {
+  init_storage 2>/dev/null
+  STUB_AWS_GET_ERR="An error occurred (NoSuchKey) when calling the GetObject operation: The specified key does not exist." \
+    run storage_get cache/x/k "${TEST_TMP}/out"
+  [ "$status" -eq 3 ]
+  [ -z "$output" ]
+  STUB_AWS_GET_ERR="fatal error: An error occurred (404) when calling the HeadObject operation: Not Found" \
+    run storage_get cache/x/k "${TEST_TMP}/out"
+  [ "$status" -eq 3 ]
+  [ -z "$output" ]
+}
+
+@test "storage_get warns with the AWS error text on any other failure" {
+  init_storage 2>/dev/null
+  STUB_AWS_GET_ERR=$'\nfatal error: An error occurred (403) when calling the HeadObject operation: Forbidden' \
+    run storage_get cache/x/k "${TEST_TMP}/out"
+  [ "$status" -eq 1 ]
+  [ "${#lines[@]}" -eq 1 ]
+  [[ "$output" == *"download of cache/x/k failed: fatal error: An error occurred (403) when calling the HeadObject operation: Forbidden"* ]]
+}
+
+@test "storage_get warns with the exit status when the AWS CLI prints nothing" {
+  init_storage 2>/dev/null
+  STUB_AWS_GET_ERR="" STUB_AWS_GET_EXIT=255 run storage_get cache/x/k "${TEST_TMP}/out"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"download of cache/x/k failed: exit status 255"* ]]
 }
 
 @test "storage_latest returns the newest key under the name prefix" {
