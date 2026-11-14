@@ -9,7 +9,8 @@
 set -uo pipefail
 
 platform="${1:?usage: assert-round2.sh android|ios}"
-min_ccache_hit_percent="${E2E_MIN_CCACHE_HIT_PERCENT:-50}"
+# Round 2 on GitHub Actions: 68 of 68 C/C++ compilations were hits (100 %).
+min_ccache_hit_percent="${E2E_MIN_CCACHE_HIT_PERCENT:-90}"
 failures=0
 
 pass() { printf '[assert-round2] ok: %s\n' "$*"; }
