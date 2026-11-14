@@ -2,6 +2,7 @@
 # Removes everything the caches restore and every build output of the sample app, so that
 # the second round of an end-to-end test starts like a fresh build machine:
 #   ~/.gradle (except the machine's own Gradle configuration, see below), ~/.ccache,
+#   the npm and CocoaPods download caches (~/.npm/_cacache, ~/Library/Caches/CocoaPods),
 #   the sample app's node_modules, Pods, Android build directories and iOS DerivedData
 #   (E2E_DERIVED_DATA_DIR, as in build-ios.sh).
 #
@@ -65,6 +66,10 @@ if [ -d "${HOME}/.gradle" ]; then
 fi
 
 rm -rf "${HOME}/.ccache"
+
+# Download caches the step does not handle, so that the round-2 times show only the effect of
+# the step's caches: npm's package cache and CocoaPods' download cache (not its spec repos).
+rm -rf "${HOME}/.npm/_cacache" "${HOME}/Library/Caches/CocoaPods"
 
 rm -rf \
   "${app}/node_modules" \

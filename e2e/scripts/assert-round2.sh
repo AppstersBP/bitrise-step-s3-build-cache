@@ -5,7 +5,8 @@
 #          taken from the build cache, ccache hit rate of at least
 #          E2E_MIN_CCACHE_HIT_PERCENT (default below).
 # ios:     CocoaPods restored by exact key and refreshed on save.
-# Every failed check is printed; the exit status is 1 if any failed.
+# All step outputs (and the ccache statistics) are printed first. Every failed check is
+# printed; the exit status is 1 if any failed.
 set -uo pipefail
 
 platform="${1:?usage: assert-round2.sh android|ios}"
@@ -45,19 +46,29 @@ check_gradle_from_cache() {
   fi
 }
 
+# print_results: show every restore and save output of the step (and the ccache statistics on
+# Android) before any check, so that a failed check can be traced to its cache.
+ccache_stats=""
+print_results() {
+  printf '[assert-round2] step outputs:\n'
+  env | LC_ALL=C sort | grep -E '^S3_CACHE_(RESULT|SAVE)_[A-Z_]+=' | sed 's/^/  /' || printf '  (none)\n'
+  if [ "${platform}" = android ] && command -v ccache >/dev/null 2>&1; then
+    ccache_stats="$(ccache --show-stats 2>&1)"
+    printf '[assert-round2] ccache statistics of round 2:\n%s\n' "${ccache_stats}"
+    if [ -n "${E2E_LOG_DIR:-}" ]; then
+      printf '%s\n' "${ccache_stats}" >"${E2E_LOG_DIR}/ccache-stats-round2.txt" 2>/dev/null || true
+    fi
+  fi
+}
+
 check_ccache_hits() {
-  local stats line hits total percent
+  local line hits total percent
   if ! command -v ccache >/dev/null 2>&1; then
     fail "ccache: not installed"
     return
   fi
-  stats="$(ccache --show-stats 2>&1)"
-  printf '%s\n' "${stats}"
-  if [ -n "${E2E_LOG_DIR:-}" ]; then
-    printf '%s\n' "${stats}" >"${E2E_LOG_DIR}/ccache-stats-round2.txt" 2>/dev/null || true
-  fi
   # ccache 4: "  Hits:   123 /  130 (94.62%)"
-  line="$(printf '%s\n' "${stats}" | grep -E '^[[:space:]]*Hits:' | head -n 1)"
+  line="$(printf '%s\n' "${ccache_stats}" | grep -E '^[[:space:]]*Hits:' | head -n 1)"
   hits="$(printf '%s' "${line}" | awk '{ print $2 }')"
   total="$(printf '%s' "${line}" | awk '{ print $4 }')"
   case "${hits}/${total}" in
@@ -77,6 +88,10 @@ check_ccache_hits() {
     fail "ccache: ${hits} of ${total} compilations were hits (${percent} %), expected at least ${min_ccache_hit_percent} %"
   fi
 }
+
+case "${platform}" in
+  android | ios) print_results ;;
+esac
 
 case "${platform}" in
   android)

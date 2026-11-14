@@ -125,9 +125,5 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: e2e-ios-logs
-          path: |
-            ${{ env.E2E_LOG_DIR }}
-            e2e/sample-app/ios/Podfile.lock
-            e2e/sample-app/ios/sampleapp.xcodeproj/project.pbxproj
-            e2e/sample-app/ios/sampleapp.xcworkspace
+          path: ${{ env.E2E_LOG_DIR }}
           if-no-files-found: ignore

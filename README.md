@@ -166,7 +166,7 @@ The end-to-end workflows in `bitrise.yml` build the sample app in `e2e/sample-ap
 
 Each run starts its own MinIO (`e2e/scripts/start-minio.sh`) and uses a new prefix. `e2e-external-bucket` runs the Android test against the bucket given by the `S3_CACHE_*` variables and secrets instead, and does nothing when they are not set.
 
-The caches live in the home directory of the machine, so these workflows delete `~/.gradle` (keeping the machine's own `gradle.properties` and init scripts) and `~/.ccache`. They refuse to run unless `CI=true` (set by Bitrise and GitHub Actions) or `S3_CACHE_E2E_ALLOW_LOCAL_WIPE=true`. On a developer machine, use the Docker setup below.
+The caches live in the home directory of the machine, so these workflows delete `~/.gradle` (keeping the machine's own `gradle.properties` and init scripts), `~/.ccache` and the npm and CocoaPods download caches (`~/.npm/_cacache`, `~/Library/Caches/CocoaPods`). They refuse to run unless `CI=true` (set by Bitrise and GitHub Actions) or `S3_CACHE_E2E_ALLOW_LOCAL_WIPE=true`. On a developer machine, use the Docker setup below.
 
 ### Android end-to-end test in Docker
 
