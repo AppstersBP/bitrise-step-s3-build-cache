@@ -98,10 +98,20 @@ start_binary() {
 }
 
 # S3_CACHE_MINIO_ENDPOINT uses a running MinIO; S3_CACHE_MINIO_RUNTIME=binary skips Docker
-# (used to test the fallback).
+# (used to test the fallback); S3_CACHE_MINIO_RUNTIME=docker uses Docker only, with no fallback
+# (used by check-docker.sh).
 if [ -n "${S3_CACHE_MINIO_ENDPOINT:-}" ]; then
   printf 'external %s\n' "${ENDPOINT}" >"${STATE_FILE}"
   say "using the MinIO at ${ENDPOINT}"
+elif [ "${S3_CACHE_MINIO_RUNTIME:-}" = docker ]; then
+  if ! command -v docker >/dev/null 2>&1 || ! docker info >/dev/null 2>&1; then
+    say "Docker is not available"
+    exit 1
+  fi
+  start_docker || {
+    rm -f "${STATE_FILE}"
+    exit 1
+  }
 elif [ "${S3_CACHE_MINIO_RUNTIME:-}" != binary ] && command -v docker >/dev/null 2>&1 && docker info >/dev/null 2>&1; then
   start_docker || {
     say "Docker could not start MinIO, trying the binary"

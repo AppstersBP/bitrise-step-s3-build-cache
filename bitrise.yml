@@ -110,6 +110,19 @@ workflows:
             if [ -n "${S3_TEST_DIR}" ]; then rm -rf "${S3_TEST_DIR}"; fi
             exit "${rc}"
 
+  # Probe: reports whether MinIO runs through Docker and through its binary on this stack
+  # (prints `docker: ok|unavailable` and `binary: ok|unavailable`). Fails only if neither works.
+  check-docker:
+    summary: Checks whether MinIO can run in Docker and as a binary on this machine.
+    steps:
+    - git::https://github.com/bitrise-steplib/steps-script.git@master:
+        title: Check Docker and the MinIO binary
+        inputs:
+        - content: |-
+            #!/usr/bin/env bash
+            set -euo pipefail
+            e2e/scripts/check-docker.sh
+
   # End-to-end tests: build the sample app in e2e/sample-app twice with the step around each
   # build and check that the second round used the caches. They run on GitHub Actions, in
   # e2e/docker (Android) and on Bitrise. The caches live in the real home directory, so the

@@ -157,6 +157,10 @@ A value of 30 days is a reasonable start for a project that builds every few day
 
 GitHub Actions runs all of them on every push.
 
+### Supported stacks
+
+The workflow `check-docker` (`bitrise run check-docker`) starts MinIO once through Docker and once as the pinned binary, writes and reads one object each time and prints `docker: ok` or `docker: unavailable` and `binary: ok` or `binary: unavailable`. It fails only if neither works. The results per Bitrise stack follow here.
+
 ### End-to-end tests
 
 The end-to-end workflows in `bitrise.yml` build the sample app in `e2e/sample-app` twice: restore, build, save, then `e2e/scripts/clean-local.sh` removes the local caches and build outputs, then restore, build, save again. `e2e/scripts/assert-round2.sh` then checks the second round:
