@@ -37,13 +37,24 @@ app="$(cd "$(dirname "${BASH_SOURCE[0]}")/../sample-app" && pwd)"
 if [ -x "${app}/android/gradlew" ] && [ -d "${HOME}/.gradle/wrapper/dists" ]; then
   (cd "${app}/android" && ./gradlew --stop >/dev/null 2>&1) || say "could not stop the Gradle daemons"
 fi
+# --stop returns before the daemons have exited, and they still write to ~/.gradle meanwhile.
+for _ in $(seq 1 30); do
+  pgrep -f 'GradleDaemon|KotlinCompileDaemon' >/dev/null 2>&1 || break
+  sleep 1
+done
+pgrep -f 'GradleDaemon|KotlinCompileDaemon' >/dev/null 2>&1 &&
+  say "Gradle or Kotlin daemons are still running after 30 s; removing their files anyway"
 
 # ~/.gradle: build machines (Bitrise among them) ship their own gradle.properties and init
 # scripts there, which a fresh machine has too. Keep those, and remove the build cache
 # setting so that the restore step has to enable it again.
 if [ -d "${HOME}/.gradle" ]; then
   find "${HOME}/.gradle" -mindepth 1 -maxdepth 1 \
-    ! -name gradle.properties ! -name init.d ! -name init.gradle -exec rm -rf {} +
+    ! -name gradle.properties ! -name init.d ! -name init.gradle -exec rm -rf {} + 2>/dev/null || {
+    sleep 5
+    find "${HOME}/.gradle" -mindepth 1 -maxdepth 1 \
+      ! -name gradle.properties ! -name init.d ! -name init.gradle -exec rm -rf {} +
+  }
   props="${HOME}/.gradle/gradle.properties"
   if [ -f "${props}" ]; then
     tmp="$(mktemp "${TMPDIR:-/tmp}/clean-local.XXXXXX")"
